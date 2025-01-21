@@ -237,11 +237,12 @@ class Opar:
             logging.info('~~~Packet: %s is received by UAV: %s at: %s',
                          packet_copy.packet_id, self.my_drone.identifier, self.simulator.env.now)
             if packet_copy.dst_drone.identifier == self.my_drone.identifier:
-                latency = self.simulator.env.now - packet_copy.creation_time  # in us
-                self.simulator.metrics.deliver_time_dict[packet_copy.packet_id] = latency
-                self.simulator.metrics.throughput_dict[packet_copy.packet_id] = config.DATA_PACKET_LENGTH / (latency / 1e6)
-                self.simulator.metrics.hop_cnt_dict[packet_copy.packet_id] = packet_copy.get_current_ttl()
-                self.simulator.metrics.datapacket_arrived.add(packet_copy.packet_id)
+                if packet_copy.packet_id not in self.simulator.metrics.datapacket_arrived:
+                    latency = self.simulator.env.now - packet_copy.creation_time  # in us
+                    self.simulator.metrics.deliver_time_dict[packet_copy.packet_id] = latency
+                    self.simulator.metrics.throughput_dict[packet_copy.packet_id] = config.DATA_PACKET_LENGTH / (latency / 1e6)
+                    self.simulator.metrics.hop_cnt_dict[packet_copy.packet_id] = packet_copy.get_current_ttl()
+                    self.simulator.metrics.datapacket_arrived.add(packet_copy.packet_id)
 
                 config.GL_ID_ACK_PACKET += 1
                 src_drone = self.simulator.drones[src_drone_id]  # previous drone
@@ -264,7 +265,7 @@ class Opar:
                     pass
             else:
                 if self.my_drone.transmitting_queue.qsize() < self.my_drone.max_queue_size:
-                    # self.my_drone.transmitting_queue.put(packet_copy)  # ###################
+                    self.my_drone.transmitting_queue.put(packet_copy) 
 
                     config.GL_ID_ACK_PACKET += 1
                     src_drone = self.simulator.drones[src_drone_id]  # previous drone
@@ -361,7 +362,6 @@ def link_lifetime_predictor(drone1, drone2, max_comm_range):
     z3 = (coords1[2] - coords2[2]) ** 2
 
     A = x1 + x2 + x3
-
     B = y1 + y2 + y3
     C = (z1 + z2 + z3) - max_comm_range ** 2
 
