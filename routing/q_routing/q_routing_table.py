@@ -5,13 +5,13 @@ from collections import defaultdict
 
 
 class QRoutingTable:
-    def __init__(self, env, my_drone):
+    def __init__(self, env, my_drone, rng_routing):
         self.env = env
         self.my_drone = my_drone
         self.neighbor_table = defaultdict(list)
         self.q_table = 30000 * np.ones((my_drone.simulator.n_drones, my_drone.simulator.n_drones))  # initialization
         self.entry_life_time = 2.5 * 1e6  # unit: us
-        self.random_sd = self.my_drone.identifier * 1000
+        self.rng_routing = rng_routing
 
     # determine if the neighbor table is empty
     def is_empty(self):
@@ -88,11 +88,8 @@ class QRoutingTable:
 
         dst_id = dst_drone.identifier
 
-        random.seed(self.random_sd)
-
-        if random.random() < 0.9 * math.pow(0.5, self.env.now / 1e6):
-            best_id = random.choice(list(self.neighbor_table.keys()))
-            self.random_sd += 1
+        if self.rng_routing.random() < 0.9 * math.pow(0.5, self.env.now / 1e6):
+            best_id = self.rng_routing.choice(list(self.neighbor_table.keys()))
         else:
             best_q_value = 1e10
             best_id = my_drone.identifier
@@ -111,8 +108,6 @@ class QRoutingTable:
                         candidate_of_min_q_list.append(neighbor)
 
             if len(candidate_of_min_q_list) != 0:
-                random.seed(self.random_sd)
-                best_id = random.choice(candidate_of_min_q_list)
-                self.random_sd += 1
+                best_id = self.rng_routing.choice(candidate_of_min_q_list)
 
         return best_id

@@ -43,7 +43,8 @@ class QRouting:
 
     Attributes:
         simulator: the simulation platform that contains everything
-        my_drone: the drone that installed the GPSR
+        my_drone: the drone that installed the Q-routing
+        rng_routing: a Random class based on which we can call the function that generates the random number
         hello_interval: interval of sending hello packet
         learning_rate: used to guide the degree to which the Q-value is updated
         table: including neighbor table and Q-table
@@ -54,16 +55,17 @@ class QRouting:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/8/20
-    Updated at: 2024/8/29
+    Updated at: 2025/1/21
 
     """
 
     def __init__(self, simulator, my_drone):
         self.simulator = simulator
         self.my_drone = my_drone
+        self.rng_routing = random.Random(self.my_drone.identifier + self.my_drone.simulator.seed + 10)
         self.hello_interval = 0.5 * 1e6  # broadcast hello packet every 0.5s
         self.learning_rate = 0.5
-        self.table = QRoutingTable(self.simulator.env, my_drone)
+        self.table = QRoutingTable(self.simulator.env, my_drone,self.rng_routing)
         self.simulator.env.process(self.broadcast_hello_packet_periodically())
         self.simulator.env.process(self.check_waiting_list())
 
@@ -85,7 +87,7 @@ class QRouting:
     def broadcast_hello_packet_periodically(self):
         while True:
             self.broadcast_hello_packet(self.my_drone)
-            jitter = random.randint(1000, 2000)  # delay jitter
+            jitter = self.rng_routing.randint(1000, 2000)  # delay jitter
             yield self.simulator.env.timeout(self.hello_interval + jitter)
 
     def next_hop_selection(self, packet):
@@ -137,13 +139,14 @@ class QRouting:
                          packet_copy.packet_id, self.my_drone.identifier, self.simulator.env.now)
 
             if packet_copy.dst_drone.identifier == self.my_drone.identifier:
-                latency = self.simulator.env.now - packet_copy.creation_time  # in us
-                self.simulator.metrics.deliver_time_dict[packet_copy.packet_id] = latency
-                self.simulator.metrics.throughput_dict[packet_copy.packet_id] = config.DATA_PACKET_LENGTH / (latency / 1e6)
-                self.simulator.metrics.hop_cnt_dict[packet_copy.packet_id] = packet_copy.get_current_ttl()
-                self.simulator.metrics.datapacket_arrived.add(packet_copy.packet_id)
-                logging.info('Packet: %s is received by destination UAV: %s',
-                             packet_copy.packet_id, self.my_drone.identifier)
+                if packet_copy.packet_id not in self.simulator.metrics.datapacket_arrived:
+                    latency = self.simulator.env.now - packet_copy.creation_time  # in us
+                    self.simulator.metrics.deliver_time_dict[packet_copy.packet_id] = latency
+                    self.simulator.metrics.throughput_dict[packet_copy.packet_id] = config.DATA_PACKET_LENGTH / (latency / 1e6)
+                    self.simulator.metrics.hop_cnt_dict[packet_copy.packet_id] = packet_copy.get_current_ttl()
+                    self.simulator.metrics.datapacket_arrived.add(packet_copy.packet_id)
+                    logging.info('Packet: %s is received by destination UAV: %s',
+                                 packet_copy.packet_id, self.my_drone.identifier)
 
                 # waiting time includes queuing delay and access delay
                 waiting_time = packet_copy.transmitting_start_time - packet_copy.waiting_start_time

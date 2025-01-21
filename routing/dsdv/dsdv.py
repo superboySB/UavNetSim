@@ -22,6 +22,7 @@ class Dsdv:
     Attributes:
         simulator: the simulation platform that contains everything
         my_drone: the drone that installed the GPSR
+        rng_routing: a Random class based on which we can call the function that generates the random number
         hello_interval: interval of sending hello packet
         routing_table: routing table of DSDV
 
@@ -33,12 +34,13 @@ class Dsdv:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/4/14
-    Updated at: 2024/5/21
+    Updated at: 2025/1/21
     """
 
     def __init__(self, simulator, my_drone):
         self.simulator = simulator
         self.my_drone = my_drone
+        self.rng_routing = random.Random(self.my_drone.identifier + self.my_drone.simulator.seed + 10)
         self.hello_interval = 0.5 * 1e6  # broadcast hello packet every 0.5s
         self.routing_table = DsdvRoutingTable(self.simulator.env, my_drone)
         self.simulator.env.process(self.broadcast_hello_packet_periodically())
@@ -93,7 +95,7 @@ class Dsdv:
     def broadcast_hello_packet_periodically(self):
         while True:
             self.broadcast_hello_packet(self.my_drone)
-            jitter = random.randint(1000, 2000)  # delay jitter
+            jitter = self.rng_routing.randint(1000, 2000)  # delay jitter
             yield self.simulator.env.timeout(self.hello_interval+jitter)
 
     def next_hop_selection(self, packet):
@@ -164,7 +166,7 @@ class Dsdv:
                     pass
             else:
                 if self.my_drone.transmitting_queue.qsize() < self.my_drone.max_queue_size:
-                    self.my_drone.transmitting_queue.put(packet_copy)  # ###################
+                    self.my_drone.transmitting_queue.put(packet_copy)
 
                     config.GL_ID_ACK_PACKET += 1
                     src_drone = self.simulator.drones[src_drone_id]  # previous drone
