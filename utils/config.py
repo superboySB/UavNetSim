@@ -1,7 +1,7 @@
 import logging
-from utils.ieee_802_11 import IEEE_802_11
+from utils.ieee_802_11 import IeeeStandard
 
-IEEE_802_11 = IEEE_802_11().b
+IEEE_802_11 = IeeeStandard().b_802_11
 
 # --------------------- simulation parameters --------------------- #
 MAP_LENGTH = 500  # m, length of the map

@@ -1,7 +1,7 @@
-class IEEE_802_11:
+class IeeeStandard:
     def __init__(self):
         # IEEE 802.11a
-        self.a = {'carrier_frequency': 5 * 1e9,  # 5 GHz
+        self.a_802_11 = {'carrier_frequency': 5 * 1e9,  # 5 GHz
                   'bit_rate': 54 * 1e6,  # 54 Mbps
                   'bandwidth': 20 * 1e6,  # 20 MHz
                   'slot_duration': 9,  # microseconds
@@ -39,14 +39,14 @@ class IEEE_802_11:
             communications, 2007, pp. 118-125.
         
         """
-        self.b = {'carrier_frequency': 2.4 * 1e9,  # ≈2.4 GHz! (since there are many sub-channels)
+        self.b_802_11 = {'carrier_frequency': 2.4 * 1e9,  # ≈2.4 GHz! (since there are many sub-channels)
                   'bit_rate': 2 * 1e6,  # up to 11 Mbps
                   'bandwidth': 22 * 1e6,  # 22 MHz
                   'slot_duration': 20,  # microseconds
                   'SIFS': 10}
 
         # IEEE 802.11g
-        self.g = {'carrier_frequency': 2.4 * 1e9,  # 2.4 GHz
+        self.g_802_11 = {'carrier_frequency': 2.4 * 1e9,  # 2.4 GHz
                   'bit_rate': 54 * 1e6,  # 54 Mbps
                   'bandwidth': 20 * 1e6,  # 20 MHz
                   'slot_duration': 9,  # microseconds
