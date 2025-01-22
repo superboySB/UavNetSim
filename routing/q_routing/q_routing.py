@@ -236,7 +236,7 @@ class QRouting:
         transmitting_start_time = data_packet_acked.transmitting_start_time
         transmission_delay = self.simulator.env.now - transmitting_start_time  # in us
 
-        self.simulator.metrics.mac_delay.append((self.simulator.env.now - data_packet_acked.backoff_start_time) / 1e3)
+        self.simulator.metrics.mac_delay.append((self.simulator.env.now - data_packet_acked.first_attempt_time) / 1e3)
 
         logging.info('Data packet id: %s, real transmission delay is: %s',
                      data_packet_acked.packet_id, transmission_delay)

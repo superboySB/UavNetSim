@@ -176,7 +176,7 @@ class Greedy:
             data_packet_acked = packet.ack_packet
 
             self.simulator.metrics.mac_delay.append(
-                (self.simulator.env.now - data_packet_acked.backoff_start_time) / 1e3)
+                (self.simulator.env.now - data_packet_acked.first_attempt_time) / 1e3)
 
             self.my_drone.remove_from_queue(data_packet_acked)
 

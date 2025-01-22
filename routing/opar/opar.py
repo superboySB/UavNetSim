@@ -5,7 +5,7 @@ import numpy as np
 from entities.packet import DataPacket, AckPacket
 from topology.virtual_force.vf_packet import VfPacket
 from utils import config
-from utils.util_function import euclidean_distance
+from utils.util_function import euclidean_distance_3d
 from phy.large_scale_fading import maximum_communication_range
 
 
@@ -64,7 +64,7 @@ class Opar:
                 drone1 = self.simulator.drones[i]
                 drone2 = self.simulator.drones[j]
 
-                if (i != j) and (euclidean_distance(drone1.coords, drone2.coords) < self.max_comm_range):
+                if (i != j) and (euclidean_distance_3d(drone1.coords, drone2.coords) < self.max_comm_range):
                     cost[i, j] = 1
                     cost[j, i] = 1
 
@@ -265,7 +265,7 @@ class Opar:
                     pass
             else:
                 if self.my_drone.transmitting_queue.qsize() < self.my_drone.max_queue_size:
-                    self.my_drone.transmitting_queue.put(packet_copy) 
+                    self.my_drone.transmitting_queue.put(packet_copy)
 
                     config.GL_ID_ACK_PACKET += 1
                     src_drone = self.simulator.drones[src_drone_id]  # previous drone
@@ -292,7 +292,7 @@ class Opar:
         elif isinstance(packet, AckPacket):
             data_packet_acked = packet.ack_packet
 
-            self.simulator.metrics.mac_delay.append((self.simulator.env.now - data_packet_acked.backoff_start_time) / 1e3)
+            self.simulator.metrics.mac_delay.append((self.simulator.env.now - data_packet_acked.first_attempt_time) / 1e3)
 
             self.my_drone.remove_from_queue(data_packet_acked)
 

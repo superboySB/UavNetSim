@@ -29,6 +29,7 @@ class CsmaCa:
     Main attributes:
         my_drone: the drone that installed the CSMA/CA protocol
         simulator: the simulation platform that contains everything
+        rng_mac: a Random class based on which we can call the function that generates the random number
         env: simulation environment created by simpy
         phy: the installed physical layer
         channel_states: used to determine if the channel is idle
@@ -47,12 +48,13 @@ class CsmaCa:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/1/11
-    Updated at: 2024/9/22
+    Updated at: 2025/1/22
     """
 
     def __init__(self, drone):
         self.my_drone = drone
         self.simulator = drone.simulator
+        self.rng_mac = random.Random(self.my_drone.identifier + self.my_drone.simulator.seed + 5)
         self.env = drone.env
         self.phy = Phy(self)
         self.channel_states = self.simulator.channel_states
@@ -73,7 +75,7 @@ class CsmaCa:
         transmission_attempt = pkd.number_retransmission_attempt[self.my_drone.identifier]
         contention_window = (config.CW_MIN + 1) * (2 ** (transmission_attempt-1)) - 1
 
-        backoff = random.randint(0, contention_window - 1) * config.SLOT_DURATION  # random backoff, in us
+        backoff = self.rng_mac.randint(0, contention_window - 1) * config.SLOT_DURATION  # random backoff, in us
         to_wait = config.DIFS_DURATION + backoff
 
         while to_wait:
@@ -86,7 +88,7 @@ class CsmaCa:
                 starts backoff and the time when it is acknowledged and removed from the queue, so the "backoff_start_
                 time" should be recorded only when the drone transmits this packet for the first time.
                 """
-                pkd.backoff_start_time = self.env.now
+                pkd.first_attempt_time = self.env.now
 
             # start listen the channel at backoff stage
             self.env.process(self.listen(self.channel_states, self.simulator.drones, pkd))
@@ -169,7 +171,7 @@ class CsmaCa:
             if pkd.number_retransmission_attempt[self.my_drone.identifier] < config.MAX_RETRANSMISSION_ATTEMPT:
                 yield self.env.process(self.my_drone.packet_coming(pkd))
             else:
-                self.simulator.metrics.mac_delay.append((self.simulator.env.now - pkd.backoff_start_time) / 1e3)
+                self.simulator.metrics.mac_delay.append((self.simulator.env.now - pkd.first_attempt_time) / 1e3)
 
                 key2 = 'wait_ack' + str(self.my_drone.identifier) + '_' + str(pkd.packet_id)
                 self.my_drone.mac_protocol.wait_ack_process_finish[key2] = 1
