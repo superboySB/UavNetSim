@@ -1,6 +1,6 @@
 import logging
 import math
-from utils.util_function import euclidean_distance
+from utils.util_function import euclidean_distance_3d
 from collections import defaultdict
 
 
@@ -103,12 +103,12 @@ class GreedyNeighborTable:
         :return: none
         """
 
-        best_distance = euclidean_distance(my_drone.coords, dst_drone.coords)
+        best_distance = euclidean_distance_3d(my_drone.coords, dst_drone.coords)
         best_id = my_drone.identifier
 
         for key in self.neighbor_table.keys():
             next_hop_position = self.neighbor_table[key][0]
-            temp_distance = euclidean_distance(next_hop_position, dst_drone.coords)
+            temp_distance = euclidean_distance_3d(next_hop_position, dst_drone.coords)
             if temp_distance < best_distance:
                 best_distance = temp_distance
                 best_id = key

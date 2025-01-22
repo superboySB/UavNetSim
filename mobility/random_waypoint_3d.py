@@ -2,7 +2,7 @@ import random
 import numpy as np
 from utils import config
 import matplotlib.pyplot as plt
-from utils.util_function import euclidean_distance
+from utils.util_function import euclidean_distance_3d
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -122,7 +122,7 @@ class RandomWaypoint3D:
                 self.trajectory.append(next_position)
 
             # judge if the drone has reach the target waypoint
-            if euclidean_distance(next_position, target_waypoint) < 20:
+            if euclidean_distance_3d(next_position, target_waypoint) < 20:
                 self.waypoint_visited[target_waypoint_idx] = 1
                 yield env.timeout(self.pause_time)
 
@@ -166,7 +166,7 @@ class RandomWaypoint3D:
 
 
 def calculate_velocity(current_pos, target_pos, moving_speed):
-    distance = euclidean_distance(current_pos, target_pos)
+    distance = euclidean_distance_3d(current_pos, target_pos)
     normalized_vector = [(target_pos[0] - current_pos[0]) / distance,
                          (target_pos[1] - current_pos[1]) / distance,
                          (target_pos[2] - current_pos[2]) / distance]
