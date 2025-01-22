@@ -14,10 +14,17 @@
 
 This Python-based simulation platform can realistically model various components of the UAV network, including the network layer, MAC layer and physical layer, as well as the UAV mobility model, energy model, etc. In addition, the platform can be easily extended to meet the needs of different users and develop their own protocols.
 
-## Requiremens
+## Requirements
 - Python >= 3.3 
 - Simpy >= 4.1.1
-  
+
+## Features
+In this section, some features of this platform are mentioned so that you can decide if this platform meets your development or research needs.
+- Python-based (this simulation platform is developed based on SimPy library in Python)
+- Support reinforcement learning (this platform can be served as a good environment for agent training)
+- Easy to extend (modular programming is used, and users can easily add their own designed modules)
+- Support network visualization
+
 ## Installation and usage
 Firstly, download this project:
 ```
