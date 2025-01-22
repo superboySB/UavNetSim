@@ -45,7 +45,7 @@ class Packet:
 
         # for calculating the queuing delay
         self.waiting_start_time = None
-        self.backoff_start_time = None
+        self.first_attempt_time = None
         self.transmitting_start_time = None
 
         self.time_delivery = None  # for end-to-end delay
