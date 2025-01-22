@@ -2,7 +2,7 @@ import math
 import numpy as np
 from collections import defaultdict
 from utils import config
-from utils.util_function import euclidean_distance
+from utils.util_function import euclidean_distance_3d
 from phy.large_scale_fading import maximum_communication_range
 
 
@@ -58,7 +58,7 @@ class VfNeighborTable:
 
         center = [config.MAP_LENGTH / 2, config.MAP_WIDTH / 2, config.MAP_HEIGHT / 2]  # center of the map
 
-        attractive_force_magnitude = [euclidean_distance(self.my_drone.coords, center)] * 3
+        attractive_force_magnitude = [euclidean_distance_3d(self.my_drone.coords, center)] * 3
 
         # Note: The direction of attractive force is from itself to the center
         attractive_force_direction = [center[0] - self.my_drone.coords[0],
@@ -82,7 +82,7 @@ class VfNeighborTable:
         for key in self.neighbor_table.keys():
             if key != self.my_drone.identifier:
                 neighbor_pos = self.neighbor_table[key][0]
-                distance = euclidean_distance(self.my_drone.coords, neighbor_pos)
+                distance = euclidean_distance_3d(self.my_drone.coords, neighbor_pos)
                 if distance <= self.desired_distance:
                     repulsive_force_magnitude = [self.k / distance ** 2 - self.k / self.desired_distance ** 2] * 3
 
