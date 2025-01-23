@@ -4,11 +4,11 @@ from utils.ieee_802_11 import IeeeStandard
 IEEE_802_11 = IeeeStandard().b_802_11
 
 # --------------------- simulation parameters --------------------- #
-MAP_LENGTH = 500  # m, length of the map
-MAP_WIDTH = 500  # m, width of the map
-MAP_HEIGHT = 500  # m, height of the map
-SIM_TIME = 20 * 1e6  # us, total simulation time
-NUMBER_OF_DRONES = 15  # number of drones in the network
+MAP_LENGTH = 600  # m, length of the map
+MAP_WIDTH = 600  # m, width of the map
+MAP_HEIGHT = 600  # m, height of the map
+SIM_TIME = 15 * 1e6  # us, total simulation time
+NUMBER_OF_DRONES = 20  # number of drones in the network
 STATIC_CASE = 0  # whether to simulate a static network
 HETEROGENEOUS = 0  # heterogeneous network support (in terms of speed)
 LOGGING_LEVEL = logging.INFO  # whether to print the detail information during simulation
@@ -70,12 +70,12 @@ GL_ID_CHIRP_PACKET = 50000
 BIT_RATE = IEEE_802_11['bit_rate']
 BIT_TRANSMISSION_TIME = 1/BIT_RATE * 1e6
 BANDWIDTH = IEEE_802_11['bandwidth']
-SENSING_RANGE = 600  # in meter, defines the area where a sending node can disturb a transmission from a third node
+SENSING_RANGE = 750  # in meter, defines the area where a sending node can disturb a transmission from a third node
 
 # --------------------- mac layer parameters --------------------- #
 SLOT_DURATION = IEEE_802_11['slot_duration']
 SIFS_DURATION = IEEE_802_11['SIFS']
 DIFS_DURATION = SIFS_DURATION + (2 * SLOT_DURATION)
-CW_MIN = 201  # initial contention window size
-ACK_TIMEOUT = ACK_PACKET_LENGTH / BIT_RATE * 1e6 + SIFS_DURATION + 50  # maximum waiting time for ACK (0.1 s)
+CW_MIN = 31  # initial contention window size
+ACK_TIMEOUT = ACK_PACKET_LENGTH / BIT_RATE * 1e6 + SIFS_DURATION + 50  # maximum waiting time for ACK, in us
 MAX_RETRANSMISSION_ATTEMPT = 5
