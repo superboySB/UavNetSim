@@ -78,6 +78,8 @@ class CsmaCa:
         backoff = self.rng_mac.randint(0, contention_window - 1) * config.SLOT_DURATION  # random backoff, in us
         to_wait = config.DIFS_DURATION + backoff
 
+        logging.info('UAV: %s back-off is: %s', self.my_drone.identifier, backoff)
+
         while to_wait:
             # wait until the channel becomes idle
             yield self.env.process(self.wait_idle_channel(self.my_drone, self.simulator.drones))
@@ -115,15 +117,15 @@ class CsmaCa:
                     transmission_mode = pkd.transmission_mode
 
                     if transmission_mode == 0:  # for unicast
-                        # only unicast data packets need to wait for ACK
-                        logging.info('UAV: %s start to wait ACK for packet: %s at time: %s',
-                                     self.my_drone.identifier, pkd.packet_id, self.env.now)
-
                         next_hop_id = pkd.next_hop_id
 
                         pkd.increase_ttl()
                         self.phy.unicast(pkd, next_hop_id)  # note: unicast function should be executed first!
                         yield self.env.timeout(pkd.packet_length / config.BIT_RATE * 1e6)  # transmission delay
+
+                        # only unicast data packets need to wait for ACK
+                        logging.info('UAV: %s start to wait ACK for packet: %s at time: %s',
+                                     self.my_drone.identifier, pkd.packet_id, self.env.now)
 
                         if self.enable_ack:
                             # used to identify the process of waiting ack
