@@ -14,7 +14,7 @@ class Packet:
         __ttl: current "Time to live (TTL)"
         number_retransmission_attempt: record the number of retransmissions of packet on different drones
         waiting_start_time: the time at which tha packet is added to the "transmitting queue" of drone
-        backoff_start_time: the time at which the packet starts the backoff stage
+        first_attempt_time: the time at which the packet starts the backoff stage
         transmitting_start_time: the time at which the packet can be transmitted to the channel after backoff
         time_delivery: the time at which the packet arrives at its destination
         time_transmitted_at_last_hop: the transmitting time at last drone
@@ -22,7 +22,7 @@ class Packet:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/1/11
-    Updated at: 2024/8/29
+    Updated at: 2025/1/23
     """
 
     def __init__(self,
