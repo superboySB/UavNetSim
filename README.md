@@ -3,13 +3,13 @@
 </div>
 
 <div align="center">
-  <h1>FlyNet: Simulation Platform for Flying Ad-hoc Networks</h1>
+  <h1>FlyNet: A Simulation Platform for Flying Ad-hoc Networks</h1>
 
   <img src="https://img.shields.io/badge/Github-%40ZihaoZhouSCUT-blue" height="20">
   <img src="https://img.shields.io/badge/Contribution-Welcome-yellowgreen" height="20">
   <img src="https://img.shields.io/badge/License-MIT-brightgreen" height="20">
 
-  <h3>Make simulation more friendly to novices with high-fidelity modeling! </h3>
+  <h3>Make simulation more friendly to novices! </h3>
 </div>
 
 This Python-based simulation platform can realistically model various components of the UAV network, including the network layer, MAC layer and physical layer, as well as the UAV mobility model, energy model, etc. In addition, the platform can be easily extended to meet the needs of different users and develop their own protocols.
@@ -21,16 +21,16 @@ This Python-based simulation platform can realistically model various components
 ## Features
 In this section, some features of this platform are mentioned so that you can decide if this platform meets your development or research needs.
 - Python-based (this simulation platform is developed based on SimPy library in Python)
-- Support reinforcement learning (this platform can be served as a good environment for agent training)
+- Support reinforcement learning and other AI-based algorithm 
 - Easy to extend (modular programming is used, and users can easily add their own designed modules)
-- Support network visualization
+- Support network visualization (e.g., the flying trajectory of drone)
 
 ## Installation and usage
 Firstly, download this project:
 ```
-git clone https://github.com/Zihao-Howard-Zhou/Simulation-Platform-for-UAV-network
+git clone https://github.com/Zihao-Felix-Zhou/Simulation-Platform-for-UAV-network
 ```
-You can even ```run main.py``` directly with one click to get a sneak peek. But we recommend that you go to ```utils/config.py``` to browse and roughly understand the simulation parameters before starting the operation, including: the size of the simulation map, the number of drones, the velocities of drones, the routing protocol adopted and so on.
+You can even run ```main.py``` directly with one click to get a sneak peek. But we still recommend that you go to ```utils/config.py``` to browse and roughly understand the simulation parameters before starting the operation, including: the number of drones, the routing protocol adopted, the IEEE 802.11 standard and so on.
 
 ## Project structure
 <div align="center">
@@ -124,12 +124,12 @@ Our simulation platform can be expanded based on your research needs, including 
  * The main program of the routing protocol must contain the function: ```def next_hop_selection(self, packet)``` and ```def packet_reception(self, packet, src_drone_id)```
  * After confirming that the code logic is correct, you can import the module you designed in ```drone.py``` and install the routing module on the drone:
    ```python
-   from routing.gpsr.gpsr import Gpsr  # import your module
+   from routing.dsdv.dsdv import Dsdv  # import your module
    ...
    class Drone:
-     def __init__(self, env, node_id, coords, speed, certain_channel, simulator):
+     def __init__(self, env, node_id, coords, speed, inbox, simulator):
        ...
-       self.routing_protocol = Gpsr(self.simulator, self)  # install
+       self.routing_protocol = Dsdv(self.simulator, self)  # install
        ...
    ```
 
