@@ -45,6 +45,7 @@ class Greedy:
         self.my_drone = my_drone
         self.rng_routing = random.Random(self.my_drone.identifier + self.my_drone.simulator.seed + 10)
         self.hello_interval = 0.5 * 1e6  # broadcast hello packet every 0.5s
+        self.check_interval = 0.6 * 1e6
         self.neighbor_table = GreedyNeighborTable(self.simulator.env, my_drone)
         self.simulator.env.process(self.broadcast_hello_packet_periodically())
         self.simulator.env.process(self.check_waiting_list())
@@ -212,7 +213,7 @@ class Greedy:
     def check_waiting_list(self):
         while True:
             if not self.my_drone.sleep:
-                yield self.simulator.env.timeout(0.6 * 1e6)
+                yield self.simulator.env.timeout(self.check_interval)
                 for waiting_pkd in self.my_drone.waiting_list:
                     if self.simulator.env.now > waiting_pkd.creation_time + waiting_pkd.deadline:
                         self.my_drone.waiting_list.remove(waiting_pkd)
