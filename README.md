@@ -28,7 +28,7 @@ In this section, some features of this platform are mentioned so that you can de
 ## Installation and usage
 Firstly, download this project:
 ```
-git clone https://github.com/Zihao-Felix-Zhou/Simulation-Platform-for-UAV-network
+git clone https://github.com/Zihao-Felix-Zhou/UavNetSim.git
 ```
 You can even run ```main.py``` directly with one click to get a sneak peek. But we still recommend that you go to ```utils/config.py``` to browse and roughly understand the simulation parameters before starting the operation, including: the number of drones, the routing protocol adopted, the IEEE 802.11 standard and so on.
 
