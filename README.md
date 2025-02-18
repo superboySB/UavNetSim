@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <h1>UavSimNet: A Simulation Platform for UAV Networks</h1>
+  <h1>UavNetSim: A Simulation Platform for UAV Networks</h1>
 
   <img src="https://img.shields.io/badge/Github-%40ZihaoZhouSCUT-blue" height="20">
   <img src="https://img.shields.io/badge/Contribution-Welcome-yellowgreen" height="20">
