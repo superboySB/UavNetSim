@@ -1,9 +1,9 @@
 <div align="center">
-<img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/logo.png" width="200px">
+<img src="https://github.com/Zihao-Felix-Zhou/UavNetSim/blob/master/img/logo.png" width="650px">
 </div>
 
 <div align="center">
-  <h1>FlyNet: A Simulation Platform for Flying Ad-hoc Networks</h1>
+  <h1>UavSimNet: A Simulation Platform for UAV Swarm Networks</h1>
 
   <img src="https://img.shields.io/badge/Github-%40ZihaoZhouSCUT-blue" height="20">
   <img src="https://img.shields.io/badge/Contribution-Welcome-yellowgreen" height="20">
