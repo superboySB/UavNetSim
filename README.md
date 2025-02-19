@@ -83,10 +83,10 @@ The entry point of this project is the ```main.py``` file, we can even run it di
 - ```mobility```: it contains different 3-D mobility model of drone, e.g., Gauss-Markov mobility model, random walk, random waypoint.
 - ```phy```: it mainly includes the modeling of wireless channel in physical layer, and the definition of unicast, broadcast and multicast.
 - ```routing```: it includes the implementation of different routing protocols, e.g., DSDV, GRAd, greedy routing, Q-Learning based routing, etc.
--```simulator```: it contains all the classes to handle a simulation and the network performance metrics.
--```topology```: it includes the implementation of the topology control algorithm for UAV swarm.
--```utils```: it contains the key configuration parameters and some useful functions.
--```visualization```: it can provide visualization of the distribution of drones.
+- ```simulator```: it contains all the classes to handle a simulation and the network performance metrics.
+- ```topology```: it includes the implementation of the topology control algorithm for UAV swarm.
+- ```utils```: it contains the key configuration parameters and some useful functions.
+- ```visualization```: it can provide visualization of the distribution of drones.
 
 ## Installation and usage
 Firstly, download this project:
