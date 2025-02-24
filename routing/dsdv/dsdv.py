@@ -34,7 +34,7 @@ class Dsdv:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/4/14
-    Updated at: 2025/1/21
+    Updated at: 2025/2/24
     """
 
     def __init__(self, simulator, my_drone):
@@ -199,7 +199,7 @@ class Dsdv:
 
             self.my_drone.remove_from_queue(data_packet_acked)
 
-            key2 = 'wait_ack' + str(self.my_drone.identifier) + '_' + str(data_packet_acked.packet_id)
+            key2 = ''.join(['wait_ack', str(self.my_drone.identifier), '_', str(data_packet_acked.packet_id)])
 
             if self.my_drone.mac_protocol.wait_ack_process_finish[key2] == 0:
                 if not self.my_drone.mac_protocol.wait_ack_process_dict[key2].triggered:

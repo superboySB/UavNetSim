@@ -48,7 +48,7 @@ class CsmaCa:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/1/11
-    Updated at: 2025/1/22
+    Updated at: 2025/2/24
     """
 
     def __init__(self, drone):
@@ -103,7 +103,8 @@ class CsmaCa:
                 yield self.env.timeout(to_wait)
                 to_wait = 0  # to break the while loop
 
-                key = 'mac_send' + str(self.my_drone.identifier) + '_' + str(pkd.packet_id)
+                key = ''.join(['mac_send', str(self.my_drone.identifier), '_', str(pkd.packet_id)])
+
                 self.my_drone.mac_process_finish[key] = 1  # mark the process as "finished"
 
                 # occupy the channel to send packet
@@ -129,7 +130,8 @@ class CsmaCa:
 
                         if self.enable_ack:
                             # used to identify the process of waiting ack
-                            key2 = 'wait_ack' + str(self.my_drone.identifier) + '_' + str(pkd.packet_id)
+                            key2 = ''.join(['wait_ack', str(self.my_drone.identifier), '_', str(pkd.packet_id)])
+
                             self.wait_ack_process = self.env.process(self.wait_ack(pkd))
                             self.wait_ack_process_dict[key2] = self.wait_ack_process
                             self.wait_ack_process_finish[key2] = 0  # indicate that this process hasn't finished
@@ -175,7 +177,8 @@ class CsmaCa:
             else:
                 self.simulator.metrics.mac_delay.append((self.simulator.env.now - pkd.first_attempt_time) / 1e3)
 
-                key2 = 'wait_ack' + str(self.my_drone.identifier) + '_' + str(pkd.packet_id)
+                key2 = ''.join(['wait_ack', str(self.my_drone.identifier), '_', str(pkd.packet_id)])
+
                 self.my_drone.mac_protocol.wait_ack_process_finish[key2] = 1
 
                 logging.info('Packet: %s is dropped!', pkd.packet_id)
@@ -210,13 +213,13 @@ class CsmaCa:
         logging.info('At time: %s, UAV: %s starts to listen the channel and perform backoff',
                      self.env.now, self.my_drone.identifier)
 
-        key = 'mac_send' + str(self.my_drone.identifier) + '_' + str(pkd.packet_id)
+        key = ''.join(['mac_send', str(self.my_drone.identifier), '_', str(pkd.packet_id)])
 
         while self.my_drone.mac_process_finish[key] == 0:  # interrupt only if the process is not complete
             if check_channel_availability(channel_states, self.my_drone, drones) is False:
                 # found channel be occupied, start interrupt
 
-                key = 'mac_send' + str(self.my_drone.identifier) + '_' + str(pkd.packet_id)
+                key = ''.join(['mac_send',str(self.my_drone.identifier),'_',str(pkd.packet_id)])
                 if not self.my_drone.mac_process_dict[key].triggered:
                     self.my_drone.mac_process_dict[key].interrupt()
                     break

@@ -76,7 +76,7 @@ class Drone:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/1/11
-    Updated at: 2025/1/7
+    Updated at: 2025/2/24
     """
 
     def __init__(self,
@@ -155,7 +155,7 @@ class Drone:
                     interval of data packets follows exponential distribution
                     """
 
-                    rate = 2  # on average, how many packets are generated in 1s
+                    rate = 5  # on average, how many packets are generated in 1s
                     yield self.env.timeout(round(self.rng_drone.expovariate(rate) * 1e6))
 
                 GLOBAL_DATA_PACKET_ID += 1  # data packet id
@@ -296,7 +296,9 @@ class Drone:
 
                 # every time the drone initiates a data packet transmission, "mac_process_count" will be increased by 1
                 self.mac_process_count += 1
-                key = 'mac_send' + str(self.identifier) + '_' + str(pkd.packet_id)
+
+                key=''.join(['mac_send', str(self.identifier), '_', str(pkd.packet_id)])
+
                 mac_process = self.env.process(self.mac_protocol.mac_send(pkd))
                 self.mac_process_dict[key] = mac_process
                 self.mac_process_finish[key] = 0
