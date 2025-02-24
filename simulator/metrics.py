@@ -28,7 +28,7 @@ class Metrics:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/1/11
-    Updated at: 2024/8/31
+    Updated at: 2025/2/24
     """
 
     def __init__(self, simulator):
@@ -55,25 +55,21 @@ class Metrics:
 
     def print_metrics(self):
         # calculate the average end-to-end delay
-        for key in self.deliver_time_dict.keys():
-            self.delivery_time.append(self.deliver_time_dict[key])
+        e2e_delay = np.mean(list(self.deliver_time_dict.values())) / 1e3
 
-        for key2 in self.throughput_dict.keys():
-            self.throughput.append(self.throughput_dict[key2])
-
-        for key3 in self.hop_cnt_dict.keys():
-            self.hop_cnt.append(self.hop_cnt_dict[key3])
-
-        e2e_delay = np.mean(self.delivery_time) / 1e3  # unit: ms
-
+        # calculate the packet delivery ratio
         pdr = len(self.datapacket_arrived) / self.datapacket_generated_num * 100  # in %
 
+        # calculate the throughput
+        throughput = np.mean(list(self.throughput_dict.values())) / 1e3
+
+        # calculate the hop count
+        hop_cnt = np.mean(list(self.hop_cnt_dict.values()))
+
+        # calculate the routing load
         rl = self.control_packet_num / len(self.datapacket_arrived)
 
-        throughput = np.mean(self.throughput) / 1e3  # in Kbps
-
-        hop_cnt = np.mean(self.hop_cnt)
-
+        # channel access delay
         average_mac_delay = np.mean(self.mac_delay)
 
         print('Totally send: ', self.datapacket_generated_num, ' data packets')
