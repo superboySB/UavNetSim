@@ -48,7 +48,7 @@ class CsmaCa:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/1/11
-    Updated at: 2025/2/24
+    Updated at: 2025/2/25
     """
 
     def __init__(self, drone):
@@ -169,6 +169,7 @@ class CsmaCa:
 
         try:
             yield self.env.timeout(config.ACK_TIMEOUT)
+            self.my_drone.routing_protocol.penalize(pkd)
 
             logging.info('ACK timeout of packet: %s at: %s', pkd.packet_id, self.env.now)
 

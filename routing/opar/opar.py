@@ -39,7 +39,7 @@ class Opar:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/3/19
-    Updated at: 2025/2/24
+    Updated at: 2025/2/25
     """
 
     def __init__(self, simulator, my_drone):
@@ -342,6 +342,9 @@ class Opar:
                             pass
             else:
                 break
+
+    def penalize(self, packet):
+        pass
 
 
 def link_lifetime_predictor(drone1, drone2, max_comm_range):

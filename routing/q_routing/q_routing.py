@@ -55,7 +55,7 @@ class QRouting:
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/8/20
-    Updated at: 2025/2/24
+    Updated at: 2025/2/25
 
     """
 
@@ -273,3 +273,6 @@ class QRouting:
                             pass
             else:
                 break
+
+    def penalize(self, packet):
+        pass  # since the penalty was not mentioned in the original paper

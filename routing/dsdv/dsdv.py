@@ -27,22 +27,23 @@ class Dsdv:
         routing_table: routing table of DSDV
 
     References:
-        [1] Perkins, C. E., and Bhagwat, P.,"Highly dynamic destination-sequenced distance-vector routing (DSDV) for
+        [1] C. Perkins, and P. Bhagwat,"Highly dynamic destination-sequenced distance-vector routing (DSDV) for
             mobile computer," ACM SIGCOMM computer communication review, vol. 24, no. 4, pp. 234-244, 1994.
-        [2] He. G, "Destination-sequenced distance vector (DSDV) protocol," Networking Laboratory, Helsinki University
+        [2] G. He, "Destination-sequenced distance vector (DSDV) protocol," Networking Laboratory, Helsinki University
             of Technology, 135, pp. 1-9, 2002.
 
     Author: Zihao Zhou, eezihaozhou@gmail.com
     Created at: 2024/4/14
-    Updated at: 2025/2/24
+    Updated at: 2025/2/25
     """
 
     def __init__(self, simulator, my_drone):
         self.simulator = simulator
         self.my_drone = my_drone
         self.rng_routing = random.Random(self.my_drone.identifier + self.my_drone.simulator.seed + 10)
-        self.hello_interval = 0.5 * 1e6  # broadcast hello packet every 0.5s
-        self.check_interval = 0.6 * 1e6  # check waiting list of drone every 0.6s
+        self.hello_interval = 0.5 * 1e6  # broadcast routing table periodically
+        self.purge_interval = 0.5 * 1e6  # check broken links periodically
+        self.check_interval = 0.6 * 1e6  # check waiting list of drone periodically
         self.routing_table = DsdvRoutingTable(self.simulator.env, my_drone)
         self.simulator.env.process(self.broadcast_hello_packet_periodically())
         self.simulator.env.process(self.detect_broken_link_periodically(my_drone))
@@ -246,3 +247,6 @@ class Dsdv:
                             pass
             else:
                 break
+
+    def penalize(self, packet):
+        pass
