@@ -17,7 +17,12 @@ logging.basicConfig(filename='running_log.log',
 
 class Dsdv:
     """
-    Main procedure of DSDV (v1.0)
+    Main procedure of DSDV (v2.0)
+
+    In this version of code, when the broken link is detected, the node will broadcast its new routing table, for all
+    its neighboring nodes, after receiving the update packet, the neighbors update their routing table, and then
+    re-transmit the update packet to the corresponding neighbors of each of them. The process will be repeated until
+    all the other nodes in the network have received a copy of the update packet.
 
     Attributes:
         simulator: the simulation platform that contains everything
@@ -25,6 +30,7 @@ class Dsdv:
         rng_routing: a Random class based on which we can call the function that generates the random number
         hello_interval: interval of sending hello packet
         routing_table: routing table of DSDV
+        processed_hello_packet: used to record the id of update packet that has been processed
 
     References:
         [1] C. Perkins, and P. Bhagwat,"Highly dynamic destination-sequenced distance-vector routing (DSDV) for
@@ -45,6 +51,7 @@ class Dsdv:
         self.purge_interval = 0.5 * 1e6  # check broken links periodically
         self.check_interval = 0.6 * 1e6  # check waiting list of drone periodically
         self.routing_table = DsdvRoutingTable(self.simulator.env, my_drone)
+        self.processed_hello_packet = []
         self.simulator.env.process(self.broadcast_hello_packet_periodically())
         self.simulator.env.process(self.detect_broken_link_periodically(my_drone))
         self.simulator.env.process(self.check_waiting_list())
@@ -58,7 +65,7 @@ class Dsdv:
         """
 
         while True:
-            yield self.simulator.env.timeout(0.5 * 1e6)  # detect the broken link every 0.5s
+            yield self.simulator.env.timeout(self.purge_interval)  # detect the broken link every 0.5s
             flag = self.routing_table.purge()
 
             if flag == 1:
@@ -67,6 +74,7 @@ class Dsdv:
                                             creation_time=self.simulator.env.now,
                                             id_hello_packet=config.GL_ID_HELLO_PACKET,
                                             hello_packet_length=config.HELLO_PACKET_LENGTH,
+                                            packet_type='immediate',
                                             routing_table=self.routing_table.routing_table,
                                             simulator=self.simulator)
                 hello_pkd.transmission_mode = 1  # broadcast
@@ -85,6 +93,7 @@ class Dsdv:
                                     creation_time=self.simulator.env.now,
                                     id_hello_packet=config.GL_ID_HELLO_PACKET,
                                     hello_packet_length=config.HELLO_PACKET_LENGTH,
+                                    packet_type='periodic',
                                     routing_table=self.routing_table.routing_table,
                                     simulator=self.simulator)
         hello_pkd.transmission_mode = 1  # broadcast
@@ -134,8 +143,28 @@ class Dsdv:
 
         current_time = self.simulator.env.now
         if isinstance(packet, DsdvHelloPacket):
-            self.routing_table.update_item(packet, current_time)
-            # self.routing_table.print_neighbor(self.my_drone)
+            packet_type = packet.type
+
+            if packet_type == 'periodic':
+                self.routing_table.update_item(packet, current_time)
+                # self.routing_table.print_neighbor(self.my_drone)
+            elif packet_type == 'immediate':
+                self.routing_table.update_item(packet, current_time)
+                packet_id = packet.packet_id
+                if packet_id not in self.processed_hello_packet:
+                    self.processed_hello_packet.append(packet_id)
+
+                    hello_pkd = DsdvHelloPacket(src_drone=self.my_drone,
+                                                creation_time=self.simulator.env.now,
+                                                id_hello_packet=packet_id,
+                                                hello_packet_length=config.HELLO_PACKET_LENGTH,
+                                                packet_type='immediate',
+                                                routing_table=self.routing_table.routing_table,
+                                                simulator=self.simulator)
+                    hello_pkd.transmission_mode = 1  # broadcast
+
+                    self.simulator.metrics.control_packet_num += 1
+                    self.my_drone.transmitting_queue.put(hello_pkd)
 
         elif isinstance(packet, DataPacket):
             packet_copy = copy.copy(packet)
