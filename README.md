@@ -109,36 +109,36 @@ When the packet gets the buffer resource, MAC protocol will be performed to cont
 
 ## Module overview
 ### Routing protocol
-In this project, **Greedy Perimeter Stateless Routing (GPSR)**, **Gradient Routing (GRAd)**, **Destination-Sequenced Distance Vector routing (DSDV)** and some **Reinforcement-Learning based Routing Protocol** have been implemented. The following figure illustrates the routing procedure of GRAd and GPSR. More detail information can be found in the corresponding papers.
+In this project, **Greedy routing**, **Gradient routing (GRAd)**, **Destination-Sequenced Distance Vector routing (DSDV)**, and some **RL-based routing protocols** have been implemented. The following figure illustrates the routing procedure of GRAd and GPSR. More detailed information can be found in the corresponding papers.
 
 <div align="center">
 <img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/routing.png" width="800px">
 </div>
 
 ### Media access control (MAC) protocol
-In this project, **Carrier-sense multiple access with collision avoidance (CSMA/CA)** and **Pure aloha** have been implemented. I will give a brief overview of the version implemented in this project, and focus on how signal interference and collision are implemented in this project. The following picture shows the example of packets transmission when CSMA/CA (without RTS/CTS) protocol is adopted. When a drone wants to transmit packet:
+In this project, **basic Carrier-sense multiple access with collision avoidance (CSMA/CA)** and **Pure aloha** have been implemented. I will give a brief overview of the version implemented in this project, and focus on how signal interference and collision are implemented in this project. The following picture shows an example of packet transmission when the basic CSMA/CA (without RTS/CTS) protocol is adopted. When a drone wants to transmit a packet:
 
 1. it first needs to wait until the channel is idle
 2. when the channel is idle, the drone starts a timer and waits for "DIFS+backoff" periods of time, where the length of backoff is related to the number of re-transmissions
 3. if the entire decrement of the timer to 0 is not interrupted, then the drone can occupy the channel and start sending the packet
-4. if the countdown is interrupted, it means that the drone loses the game. The drone then freeze the timer and wait for channel idle again before re-starting its timer
+4. if the countdown is interrupted, it means that the drone loses the game. The drone then freezes the timer and waits for the channel to be idle again before re-starting its timer
 
 <div align="center">
 <img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/csmaca.png" width="800px">
 </div>
 
-The following figure demonstrates the packets transmission flow when pure aloha is adopted. When a drone installed a pure aloha protocol wants to transmit packet:
+The following figure demonstrates the packet transmission flow when pure aloha is adopted. When a drone installed a pure aloha protocol wants to transmit a packet:
 
 1. it just sends it, without listening to the channel and random backoff
 2. after sending the packet, the node starts to wait for the ACK packet
 3. if it receives ACK in time, the "mac_send" process will finish
-4. if not, the node will wait a random amount of time, according to the number of re-transmissions attempts, and then send packet again
+4. if not, the node will wait a random amount of time, according to the number of re-transmission attempts, and then send the packet again
 
 <div align="center">
 <img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/pure_aloha.png" width="800px">
 </div>
 
-From the above illustration we can see that, it is not only two drones sending packets at the same time that cause packet collisions. If there is an overlap in the transmission time of two data packets, it means that collision occurrs. So in our project, each drone checks its inbox every very short interval and has several important things to do (as shown in the following figure):
+From the above illustration, we can see that, it is not only two drones sending packets simultaneously that cause packet collisions. If there is an overlap in the transmission time of two data packets, it 艾also indicates that a collision occurs. So in our project, each drone checks its inbox every very short interval and has several important things to do (as shown in the following figure):
 
 1. delete the packet records in its inbox whose distance from the current time is greater than twice the maximum packet transmission delay. This reduces computational overhead because these packets are guaranteed to have already been processed and will not interfere with packets that have not yet been processed
 2. check the packet records in the inbox to see which packet has been transmitted in its entirety
@@ -149,7 +149,7 @@ From the above illustration we can see that, it is not only two drones sending p
 </div>
 
 ### Mobility model
-The mobility model is one of the most important mudules to show the characteristics of UAV network more realistically. In this project, **Gauss-Markov 3D mobility model**, **Random Walk 3D mobility model** and **Random Waypoint 3D mobility model** have been implemented. Specifically, since it is quite difficult to achieve continuous movement of drone in discrete time simulation, we set a "position_update_interval" to update the positions of drones periodically, that is, it is assumed that the drone moves continuously within this time interval. If the time interval "position_update_interval" is smaller, the simulation accuracy will be higher, but the corresponding simulation time will be longer. There will be a trade-off. Besides, the time interval that drone updates its direction can also be set manually. The trajectories of a single drone within 100 second of the simulation under the two mobility models are shown as follows:
+The mobility model is one of the most important mudules to show the characteristics of a UAV network more realistically. In this project, **Gauss-Markov 3D mobility model**, **Random Walk 3D mobility model**, and **Random Waypoint 3D mobility model** have been implemented. Specifically, since it is quite difficult to achieve continuous movement of drones in discrete time simulation, we set a ```position_update_interval``` to update the positions of drones periodically, that is, it is assumed that the drone moves continuously within this time interval. If the time interval ```position_update_interval``` is smaller, the simulation accuracy will be higher, but the corresponding simulation time will be longer. Thus, there will be a trade-off. Besides, the time interval that the drone updates its direction can also be set manually. The trajectories of a single drone within 100 seconds of the simulation under the two mobility models are shown as follows:
 
 <div align="center">
 <img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/mobility_model.png" width="800px">
@@ -171,13 +171,13 @@ The energy model of our platform is based on the work of Y. Zeng, et al. The fig
 Our "FlyNet" platform supports the evaluation of several performance metrics, as follows:
 
 - **Packet Delivery Ratio (PDR)**: PDR is the ratio of the total number of received data packets successfully at all destination drones over the total number of data packets generated by all source drones. It should be noted that PDR excludes redundant data packets. PDR can reflect the reliability of the routing protocol.
-- **Average End to End Delay (E2E Delay)**: E2E delay is the average time delay for data packets to reach from the source drone to the destination drone. Typically, delay in packet transmission involves "queuing delay", "access delay", "transmission delay", "propagation delay (So small as to be negligible)" and "processing delay".
-- **Normalized Routing Load (NRL)**: NRL is the ratio of all routing control packets send by all drones to number of received data packets at the destination drones.
+- **Average End-to-End Delay (E2E Delay)**: E2E delay is the average time delay for data packets to reach from the source drone to the destination drone. Typically, delay in packet transmission involves "queuing delay", "access delay", "transmission delay", "propagation delay (So small as to be negligible)" and "processing delay".
+- **Normalized Routing Load (NRL)**: NRL is the ratio of all routing control packets sent by all drones to the number of received data packets at the destination drones.
 - **Average Throughput**: In our platform, the calculation of throughput is: whenever the destination receives a packet, the length of the packet is divided by the end-to-end delay of the packet (because E2E delay involves the re-transmissions of this data packet)
 - **Hop Count**: Hop count is the number of router output ports through which the packet should pass.
 
 ## Design your own protocol
-Our simulation platform can be expanded based on your research needs, including designing your own mobility model of drones (in ```mobility``` folder), mac protocol (in ```mac``` floder), routing protocol (in ```routing``` floder) and so on. Next, we take routing protocols as an example to introduce how users can design their own algorithms.
+Our simulation platform can be expanded based on your research needs, including designing your own mobility model of drones (in ```mobility``` folder), mac protocol (in ```mac```folder), routing protocol (in ```routing```folder), and so on. Next, we take routing protocols as an example to introduce how users can design their own algorithms.
 
  * Create a new package under the ```routing``` folder (Don't forget to add ```__init__.py```)
  * The main program of the routing protocol must contain the function: ```def next_hop_selection(self, packet)``` and ```def packet_reception(self, packet, src_drone_id)```
@@ -199,4 +199,4 @@ Issues and pull requests are warmly welcome!
 Give a ⭐ if this project helped you!
 
 ## License
-This project is MIT licensed.
+This project is MIT-licensed.
