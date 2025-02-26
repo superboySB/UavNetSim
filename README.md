@@ -155,12 +155,6 @@ The mobility model is one of the most important mudules to show the characterist
 <img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/mobility_model.png" width="800px">
 </div>
 
-### Motion control module
-
-<div align="center">
-<img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/motion_control.png" width="800px">
-</div>
-
 ### Energy model
 The energy model of our platform is based on the work of Y. Zeng, et al. The figure below shows the power required for different drone flying speeds. The energy consumption is equal to the power multiplied by the flight time at this speed.
 <div align="center">
