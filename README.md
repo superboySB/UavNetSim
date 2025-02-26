@@ -109,7 +109,7 @@ When the packet gets the buffer resource, MAC protocol will be performed to cont
 
 ## Module overview
 ### Routing protocol
-Packet routing plays an important role in UAV networks, which enables cooperation among different UAV nodes. In this project, **Greedy routing**, **Gradient routing (GRAd)**, **Destination-Sequenced Distance Vector routing (DSDV)**, and some **RL-based routing protocols** have been implemented. The following figure illustrates the basic procedure of packet routing. More detailed information can be found in the corresponding papers.
+Packet routing plays an important role in UAV networks, which enables cooperation among different UAV nodes. In this project, **Greedy routing**, **Gradient routing (GRAd)**, **Destination-Sequenced Distance Vector routing (DSDV)**, and some **RL-based routing protocols** have been implemented. The following figure illustrates the basic procedure of packet routing. More detailed information can be found in the corresponding papers [1]-[5].
 
 <div align="center">
 <img src="https://github.com/Zihao-Felix-Zhou/UavNetSim/blob/master/img/routing.png" width="700px">
@@ -185,6 +185,13 @@ Our simulation platform can be expanded based on your research needs, including 
        self.routing_protocol = Dsdv(self.simulator, self)  # install
        ...
    ```
+
+## Reference
+[1] C. Perkins and P. Bhagwat, "[Highly dynamic destination-sequenced distance-vector routing (DSDV) for mobile computers](https://dl.acm.org/doi/abs/10.1145/190809.190336)," in *ACM SIGCOMM Computer Communication Review*, vol. 24, no. 4, pp. 234-244, 1994.  
+[2] R. Poor, "Gradient routing in ad hoc networks", 2000, [www.media.mit.edu/pia/Research/ESP/texts/poorieeepaper.pdf](www.media.mit.edu/pia/Research/ESP/texts/poorieeepaper.pdf)  
+[3] J. Boyan and M. Littman, "[Packet routing in dynamically changing networks: A reinforcement learning approach](https://proceedings.neurips.cc/paper/1993/hash/4ea06fbc83cdd0a06020c35d50e1e89a-Abstract.html)" in *Advances in Neural Information Processing Systems*, vol. 6, 1993.  
+[4] W. S. Jung, J. Yim and Y. B. Ko, "[QGeo: Q-learning-based geographic ad hoc routing protocol for unmanned robotic networks](https://ieeexplore.ieee.org/abstract/document/7829268/)," in *IEEE Communications Letters*, vol. 21, no. 10, pp. 2258-2261, 2017.  
+[5] M. Gharib, F. Afghah and E. Bentley, "[Opar: Optimized predictive and adaptive routing for cooperative uav networks](https://ieeexplore.ieee.org/abstract/document/9484489)," in *IEEE INFOCOM 2021-IEEE Conference on Computer Communications Workshops (INFOCOM WKSHPS)*, pp. 1-6, 2021.
 
 ## Contributing
 Issues and pull requests are warmly welcome! 
