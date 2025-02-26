@@ -119,7 +119,7 @@ In this project, **Greedy routing**, **Gradient routing (GRAd)**, **Destination-
 In this project, **basic Carrier-sense multiple access with collision avoidance (CSMA/CA)** and **Pure aloha** have been implemented. I will give a brief overview of the version implemented in this project, and focus on how signal interference and collision are implemented in this project. The following picture shows an example of packet transmission when the basic CSMA/CA (without RTS/CTS) protocol is adopted. When a drone wants to transmit a packet:
 
 1. it first needs to wait until the channel is idle
-2. when the channel is idle, the drone starts a timer and waits for "DIFS+backoff" periods of time, where the length of backoff is related to the number of re-transmissions
+2. when the channel is idle, the drone starts a timer and waits for ```DIFS+backoff``` periods of time, where the length of backoff is related to the number of re-transmissions
 3. if the entire decrement of the timer to 0 is not interrupted, then the drone can occupy the channel and start sending the packet
 4. if the countdown is interrupted, it means that the drone loses the game. The drone then freezes the timer and waits for the channel to be idle again before re-starting its timer
 
@@ -131,7 +131,7 @@ The following figure demonstrates the packet transmission flow when pure aloha i
 
 1. it just sends it, without listening to the channel and random backoff
 2. after sending the packet, the node starts to wait for the ACK packet
-3. if it receives ACK in time, the "mac_send" process will finish
+3. if it receives ACK in time, the ```mac_send``` process will finish
 4. if not, the node will wait a random amount of time, according to the number of re-transmission attempts, and then send the packet again
 
 <div align="center">
