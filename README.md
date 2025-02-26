@@ -112,7 +112,7 @@ When the packet gets the buffer resource, MAC protocol will be performed to cont
 Packet routing plays an important role in UAV networks, which enables cooperation among different UAV nodes. In this project, **Greedy routing**, **Gradient routing (GRAd)**, **Destination-Sequenced Distance Vector routing (DSDV)**, and some **RL-based routing protocols** have been implemented. The following figure illustrates the basic procedure of packet routing. More detailed information can be found in the corresponding papers.
 
 <div align="center">
-<img src="https://github.com/Zihao-Felix-Zhou/UavNetSim/blob/master/img/routing.png" width="800px">
+<img src="https://github.com/Zihao-Felix-Zhou/UavNetSim/blob/master/img/routing.png" width="700px">
 </div>
 
 ### Media access control (MAC) protocol
