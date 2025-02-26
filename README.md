@@ -138,7 +138,7 @@ The following figure demonstrates the packet transmission flow when pure aloha i
 <img src="https://github.com/ZihaoZhouSCUT/Simulation-Platform-for-UAV-network/blob/master/img/pure_aloha.png" width="800px">
 </div>
 
-From the above illustration, we can see that, it is not only two drones sending packets simultaneously that cause packet collisions. If there is an overlap in the transmission time of two data packets, it 艾also indicates that a collision occurs. So in our project, each drone checks its inbox every very short interval and has several important things to do (as shown in the following figure):
+From the above illustration, we can see that, it is not only two drones sending packets simultaneously that cause packet collisions. If there is an overlap in the transmission time of two data packets, it also indicates that a collision occurs. So in our project, each drone checks its inbox every very short interval and has several important things to do (as shown in the following figure):
 
 1. delete the packet records in its inbox whose distance from the current time is greater than twice the maximum packet transmission delay. This reduces computational overhead because these packets are guaranteed to have already been processed and will not interfere with packets that have not yet been processed
 2. check the packet records in the inbox to see which packet has been transmitted in its entirety
