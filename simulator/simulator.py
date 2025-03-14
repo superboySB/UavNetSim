@@ -94,3 +94,27 @@ class Simulator:
         
         # 替换方法
         self.channel.unicast_put = tracked_unicast_put
+
+    def add_event_tracking(self, visualizer):
+        """添加事件跟踪"""
+        self.visualizer = visualizer
+        
+        # 保存原始的碰撞检测方法
+        if hasattr(self.channel, 'detect_collision'):
+            original_detect_collision = self.channel.detect_collision
+            
+            # 重写碰撞检测方法以跟踪碰撞
+            def tracked_detect_collision(receiver_id, time_interval):
+                # 调用原始方法
+                result, transmitters = original_detect_collision(receiver_id, time_interval)
+                
+                # 如果发生碰撞，记录事件
+                if result and hasattr(self, 'visualizer'):
+                    # 获取碰撞位置（接收器位置）
+                    location = self.drones[receiver_id].coords if receiver_id < len(self.drones) else [0, 0, 0]
+                    self.visualizer.track_collision(location, self.env.now)
+                    
+                return result, transmitters
+            
+            # 替换方法
+            self.channel.detect_collision = tracked_detect_collision

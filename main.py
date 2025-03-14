@@ -33,3 +33,11 @@ if __name__ == "__main__":
     visualizer.finalize()
     
     print("仿真完成！可视化结果已保存。")
+    
+    # 在仿真结束后添加以下代码
+    print("----------- Metrics 类的属性 -----------")
+    for attr in dir(sim.metrics):
+        if not attr.startswith('__'):
+            value = getattr(sim.metrics, attr)
+            if not callable(value):  # 只打印非方法属性
+                print(f"{attr}: {value}")

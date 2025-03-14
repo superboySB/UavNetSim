@@ -37,6 +37,10 @@ class SimulationVisualizer:
         # 为每个UAV分配一个固定颜色
         self.colors = plt.cm.tab10(np.linspace(0, 1, self.simulator.n_drones))
         
+        # 添加碰撞和丢包事件跟踪
+        self.collision_events = []
+        self.packet_drop_events = []
+        
     def track_drone_positions(self):
         """
         记录当前无人机位置
@@ -59,6 +63,16 @@ class SimulationVisualizer:
         current_time = self.simulator.env.now / 1e6  # 转换为秒
         self.active_links.append((src_id, dst_id))
         self.link_timestamps.append(current_time)
+    
+    def track_collision(self, location, time):
+        """记录碰撞事件"""
+        current_time = time / 1e6  # 转换为秒
+        self.collision_events.append((location, current_time))
+    
+    def track_packet_drop(self, source_id, packet_id, reason, time):
+        """记录丢包事件"""
+        current_time = time / 1e6  # 转换为秒
+        self.packet_drop_events.append((source_id, packet_id, reason, current_time))
     
     def save_trajectory_plot(self):
         """
@@ -105,8 +119,11 @@ class SimulationVisualizer:
         time_points = np.arange(0, max_time + time_window, time_window)
         
         for idx, current_time in enumerate(time_points):
-            # 创建图形
-            fig, ax = plt.subplots(figsize=(10, 8))
+            # 创建图形 - 使用子图以便添加指标面板
+            fig = plt.figure(figsize=(14, 10))
+            gs = fig.add_gridspec(1, 4)
+            ax = fig.add_subplot(gs[0, :3])
+            info_ax = fig.add_subplot(gs[0, 3])
             
             # 创建网络图
             G = nx.DiGraph()
@@ -148,10 +165,65 @@ class SimulationVisualizer:
             nx.draw_networkx_nodes(G, current_positions, node_size=500, 
                                   node_color=[to_rgba(self.colors[i]) for i in range(self.simulator.n_drones)])
             
+            # 获取链路效率信息
+            edge_colors = []
+            for src, dst in G.edges():
+                # 这里可以根据链路质量给边着色
+                # 例如，基于传输成功率或延迟
+                edge_colors.append('blue')  # 默认为蓝色
+            
             nx.draw_networkx_edges(G, current_positions, width=2, alpha=0.7, arrows=True, 
-                                  arrowsize=15, arrowstyle='->')
+                                  arrowsize=15, arrowstyle='->', edge_color=edge_colors)
             
             nx.draw_networkx_labels(G, current_positions, font_size=12, font_weight='bold')
+            
+            # 获取当前时间点的性能指标
+            metrics = self.simulator.metrics
+            
+            # 尝试安全地获取数据包统计信息
+            try:
+                sent_packets = sum(1 for t in metrics.datapacket_generated_time if t <= current_time*1e6)
+            except AttributeError:
+                try:
+                    sent_packets = metrics.datapacket_generated_num
+                except AttributeError:
+                    sent_packets = 0
+            
+            try:
+                received_packets = sum(1 for t in metrics.deliver_time_dict.values() if t <= current_time*1e6)
+            except AttributeError:
+                try:
+                    received_packets = len(metrics.datapacket_arrived)
+                except AttributeError:
+                    received_packets = 0
+            
+            try:
+                collisions = sum(1 for t in metrics.collision_time if t <= current_time*1e6)
+            except AttributeError:
+                try:
+                    collisions = metrics.collision_num
+                except AttributeError:
+                    collisions = 0
+            
+            if sent_packets > 0:
+                pdr = received_packets / sent_packets * 100
+            else:
+                pdr = 0
+            
+            # 添加性能指标面板
+            info_ax.axis('off')
+            info_text = (
+                f"Simulation Time: {current_time:.2f}s\n\n"
+                f"Active Links: {len(window_links)}\n"
+                f"Sent Packets: {sent_packets}\n"
+                f"Received Packets: {received_packets}\n"
+                f"Packet Delivery Ratio: {pdr:.2f}%\n"
+                f"Collisions: {collisions}\n\n"
+                f"Link Color Legend:\n"
+                f"Blue: Normal Link\n"
+            )
+            info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
+                        fontsize=12, verticalalignment='top')
             
             # 设置图形参数
             ax.set_title(f'UAV Communication Network at t={current_time:.1f}s')
@@ -177,11 +249,76 @@ class SimulationVisualizer:
         max_time = max(self.timestamps)
         time_points = np.arange(0, max_time + interval, interval)
         
+        # 跟踪性能指标 - 直接存储累计值
+        performance_history = {
+            'sent': [], 
+            'received': [], 
+            'pdr': [], 
+            'collisions': [],
+            'window_collisions': []  # 存储每个窗口新增的碰撞数
+        }
+        
+        recent_events = []  # 用于存储最近的通信事件
+        
+        previous_collisions = 0
+        
         for idx, current_time in enumerate(time_points):
-            fig = plt.figure(figsize=(12, 10))
-            ax = fig.add_subplot(111, projection='3d')
+            fig = plt.figure(figsize=(15, 12))
             
-            # 为每个无人机绘制当前位置
+            # 创建主3D图和信息面板
+            gs = fig.add_gridspec(3, 4)
+            ax = fig.add_subplot(gs[:, :3], projection='3d')
+            info_ax = fig.add_subplot(gs[0, 3])
+            stats_ax = fig.add_subplot(gs[1, 3])
+            events_ax = fig.add_subplot(gs[2, 3])
+            
+            # 获取当前时间点的性能指标
+            metrics = self.simulator.metrics
+            
+            # 安全获取数据包统计信息
+            try:
+                sent_packets = sum(1 for t in metrics.datapacket_generated_time if t <= current_time*1e6)
+            except AttributeError:
+                try:
+                    sent_packets = metrics.datapacket_generated_num
+                except AttributeError:
+                    sent_packets = 0
+            
+            try:
+                received_packets = sum(1 for t in metrics.deliver_time_dict.values() if t <= current_time*1e6)
+            except AttributeError:
+                try:
+                    received_packets = len(metrics.datapacket_arrived)
+                except AttributeError:
+                    received_packets = 0
+            
+            # 获取碰撞的累计总数
+            try:
+                total_collisions = sum(1 for t in metrics.collision_time if t <= current_time*1e6)
+            except AttributeError:
+                try:
+                    total_collisions = metrics.collision_num
+                except AttributeError:
+                    total_collisions = 0
+            
+            # 计算当前窗口内新增的碰撞数
+            window_collisions = total_collisions - previous_collisions
+            previous_collisions = total_collisions
+            
+            # 计算PDR
+            if sent_packets > 0:
+                pdr = received_packets / sent_packets * 100
+            else:
+                pdr = 0
+                
+            # 添加到历史记录 - 存储累计值
+            performance_history['sent'].append(sent_packets)
+            performance_history['received'].append(received_packets)
+            performance_history['pdr'].append(pdr)
+            performance_history['collisions'].append(total_collisions)  # 存储累计碰撞数
+            performance_history['window_collisions'].append(window_collisions)  # 存储窗口增量
+            
+            # 绘制无人机和路径
             for i in range(self.simulator.n_drones):
                 if not self.drone_positions[i]:
                     continue
@@ -193,24 +330,30 @@ class SimulationVisualizer:
                     
                 closest_idx = np.argmin(np.abs(pos_times - current_time))
                 if closest_idx < len(self.drone_positions[i]):
+                    # 绘制无人机位置
                     x, y, z = self.drone_positions[i][closest_idx]
-                    ax.scatter(x, y, z, color=self.colors[i], marker='o', s=300, label=f'UAV {i}')
+                    ax.scatter(x, y, z, color=self.colors[i], s=100, label=f'UAV {i}')
                     
-                    # 绘制轨迹线（显示历史路径）
+                    # 绘制无人机轨迹
                     if closest_idx > 0:
-                        path_x, path_y, path_z = zip(*self.drone_positions[i][:closest_idx+1])
-                        ax.plot(path_x, path_y, path_z, color=self.colors[i], alpha=0.5, linewidth=1)
+                        x_history, y_history, z_history = zip(*self.drone_positions[i][:closest_idx+1])
+                        ax.plot(x_history, y_history, z_history, color=self.colors[i], linewidth=1.5, alpha=0.5)
             
-            # 添加通信线
-            window_links = []
-            for link, timestamp in zip(self.active_links, self.link_timestamps):
-                if current_time - interval <= timestamp <= current_time:
-                    window_links.append(link)
-            
-            for src, dst in window_links:
-                if (src < len(self.simulator.drones) and dst < len(self.simulator.drones) and 
-                    self.drone_positions[src] and self.drone_positions[dst]):
+            # 绘制当前活跃的通信链路
+            for src, dst in self.active_links:
+                # 找到链路对应的时间戳
+                link_times = np.array(self.link_timestamps)
+                if len(link_times) == 0:
+                    continue
                     
+                # 仅绘制当前时间窗口内的链路
+                valid_links = np.where((link_times <= current_time) & (link_times >= current_time - interval))[0]
+                
+                for link_idx in valid_links:
+                    src = self.active_links[link_idx][0]
+                    dst = self.active_links[link_idx][1]
+                    
+                    # 获取源节点和目标节点的位置
                     src_times = np.array(self.timestamps)
                     dst_times = np.array(self.timestamps)
                     
@@ -227,16 +370,60 @@ class SimulationVisualizer:
                         dst_pos = self.drone_positions[dst][dst_idx]
                         
                         ax.plot([src_pos[0], dst_pos[0]], 
-                               [src_pos[1], dst_pos[1]], 
-                               [src_pos[2], dst_pos[2]], 
-                               'k-', alpha=0.7, linewidth=1.5)
+                            [src_pos[1], dst_pos[1]], 
+                            [src_pos[2], dst_pos[2]], 
+                            'k-', alpha=0.7, linewidth=1.5)
+                        
+                        # 记录最近的通信事件
+                        recent_events.append(f"UAV {src} -> UAV {dst}")
+                        if len(recent_events) > 10:  # 限制事件列表长度
+                            recent_events.pop(0)
             
-            # 设置图形参数
+            # 设置3D图参数
             ax.set_xlabel('X (m)')
             ax.set_ylabel('Y (m)')
             ax.set_zlabel('Z (m)')
             ax.set_title(f'UAV Network Simulation at t={current_time:.1f}s')
             ax.legend(loc='upper right')
+            
+            # 绘制性能信息面板
+            info_ax.axis('off')
+            info_text = (
+                f"Simulation Time: {current_time:.2f}s\n\n"
+                f"Sent Packets: {sent_packets}\n"
+                f"Received Packets: {received_packets}\n"
+                f"Packet Delivery Ratio: {pdr:.2f}%\n"
+                f"Total Collisions: {total_collisions}\n"
+                f"New Collisions: {window_collisions}\n"
+            )
+            info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
+                        fontsize=12, verticalalignment='top')
+            
+            # 绘制性能指标历史图表
+            stats_ax.plot(time_points[:idx+1], performance_history['pdr'], 'g-', label='PDR (%)')
+            stats_ax.set_ylabel('PDR (%)', color='g')
+            stats_ax.tick_params(axis='y', labelcolor='g')
+            stats_ax.set_ylim(0, 100)
+            
+            ax2 = stats_ax.twinx()
+            # 绘制累计碰撞数 - 直接使用存储的累计值
+            ax2.plot(time_points[:idx+1], performance_history['collisions'], 'r-', label='Collisions')
+            ax2.set_ylabel('Collision Count', color='r')
+            ax2.tick_params(axis='y', labelcolor='r')
+            
+            stats_ax.set_title('Network Performance Metrics')
+            stats_ax.set_xlabel('Time (s)')
+            
+            # 显示最近事件
+            events_ax.axis('off')
+            events_ax.set_title('Recent Communication Events')
+            
+            event_text = "\n".join(recent_events[-8:]) if recent_events else "No recent events"
+            events_ax.text(0.05, 0.95, event_text, transform=events_ax.transAxes,
+                        fontsize=10, verticalalignment='top')
+            
+            # 调整布局
+            plt.tight_layout()
             
             # 保存图形
             plt.savefig(os.path.join(self.output_dir, 'frames', f'frame_{idx:04d}.png'), 
@@ -259,7 +446,7 @@ class SimulationVisualizer:
                 imgs = [Image.open(f) for f in frames]
                 imgs[0].save(gif_path, save_all=True, append_images=imgs[1:], duration=200, loop=0)
                 
-                print(f"创建动画: {gif_path}")
+                print(f"Created animation: {gif_path}")
                 
             # 创建通信网络动画
             comm_path = os.path.join(self.output_dir, 'communications')
@@ -272,10 +459,10 @@ class SimulationVisualizer:
                 comm_imgs = [Image.open(f) for f in comm_frames]
                 comm_imgs[0].save(comm_gif_path, save_all=True, append_images=comm_imgs[1:], duration=200, loop=0)
                 
-                print(f"创建通信网络动画: {comm_gif_path}")
+                print(f"Created communication network animation: {comm_gif_path}")
                 
         except Exception as e:
-            print(f"创建动画时出错: {e}")
+            print(f"Error creating animation: {e}")
     
     def run_visualization(self, tracking_interval=0.5, save_interval=1.0):
         """
@@ -309,9 +496,9 @@ class SimulationVisualizer:
         """
         完成可视化，保存所有图形
         """
-        print("保存可视化结果...")
+        print("Saving visualization results...")
         self.save_trajectory_plot()
         self.save_communication_graph()
         self.save_frame_visualization()
         self.create_animations()
-        print("可视化完成！结果保存在目录:", self.output_dir)
+        print("Visualization completed! Results saved in directory:", self.output_dir)
