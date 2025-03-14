@@ -7,6 +7,9 @@ import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import Axes3D
 from PIL import Image
 import tqdm
+from matplotlib.gridspec import GridSpec
+from utils import config  # 确保导入config模块
+from matplotlib.animation import FuncAnimation
 
 # 定义顶级函数 (在类外部定义，使其可以被pickle)
 def process_frame_wrapper(args):
@@ -19,7 +22,7 @@ class SimulationVisualizer:
     可视化UAV网络仿真过程，包括移动轨迹和通信状态
     """
     
-    def __init__(self, simulator, output_dir="visualization"):
+    def __init__(self, simulator, output_dir="visualization_results"):
         """
         初始化可视化器
         
@@ -33,7 +36,6 @@ class SimulationVisualizer:
         # 创建输出目录
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(os.path.join(output_dir, "frames"), exist_ok=True)
-        os.makedirs(os.path.join(output_dir, "communications"), exist_ok=True)
         
         # 初始化存储数据的结构
         self.drone_positions = {i: [] for i in range(self.simulator.n_drones)}
@@ -52,6 +54,31 @@ class SimulationVisualizer:
         self.pdr_history = []
         self.time_history = []
         
+        # Initialize arrows list
+        self.arrows = []
+        
+        # Set up figure and axes for 3D visualization
+        self.fig = plt.figure(figsize=(12, 8))
+        self.gs = GridSpec(2, 2, height_ratios=[3, 1], width_ratios=[3, 1])
+        self.ax = self.fig.add_subplot(self.gs[0, 0], projection='3d')
+        self.pdr_ax = self.fig.add_subplot(self.gs[0, 1])
+        self.pdr_ax.set_title('Packet Delivery Ratio')
+        self.pdr_ax.set_xlabel('Time (s)')
+        self.pdr_ax.set_ylabel('PDR (%)')
+        self.pdr_ax.set_ylim([0, 100])
+        self.pdr_line, = self.pdr_ax.plot([], [], 'g-')
+        
+        # Set initial axis labels and limits
+        self.ax.set_xlabel('X (m)')
+        self.ax.set_ylabel('Y (m)')
+        self.ax.set_zlabel('Z (m)')
+        
+        # 初始化碰撞计数
+        self.collision_count = 0
+        
+        # 保存初始时间
+        self.start_time = self.simulator.env.now
+    
     def track_drone_positions(self):
         """
         记录当前无人机位置
@@ -77,8 +104,8 @@ class SimulationVisualizer:
     
     def track_collision(self, location, time):
         """记录碰撞事件"""
-        current_time = time / 1e6  # 转换为秒
-        self.collision_events.append((location, current_time))
+        self.collision_events.append((location, time))
+        self.collision_count += 1  # 更新碰撞计数
     
     def track_packet_drop(self, source_id, packet_id, reason, time):
         """记录丢包事件"""
@@ -114,211 +141,6 @@ class SimulationVisualizer:
         # 保存图形
         plt.savefig(os.path.join(self.output_dir, 'uav_trajectories.png'), dpi=300, bbox_inches='tight')
         plt.close(fig)
-    
-    def save_communication_graph(self, time_window=0.5):
-        """
-        保存通信图（在给定时间窗口内的通信连接）
-        
-        参数:
-            time_window: 时间窗口大小（秒）
-        """
-        # 创建一系列时间点
-        if not self.timestamps:
-            return
-            
-        max_time = max(self.timestamps)
-        time_points = np.arange(0, max_time + time_window, time_window)
-        
-        # 初始化变量
-        previous_collisions = 0
-        performance_history = {
-            'sent': [], 
-            'received': [], 
-            'pdr': [], 
-            'collisions': [],
-            'window_collisions': []
-        }
-        recent_events = []
-        
-        # 确保目录存在
-        comm_dir = os.path.join(self.output_dir, 'communications')
-        os.makedirs(comm_dir, exist_ok=True)
-        
-        # 为每个时间点创建通信图
-        for idx, current_time in enumerate(time_points):
-            if idx % 5 == 0:
-                print(f"Saving communication graph {idx+1}/{len(time_points)} at time {current_time:.1f}s")
-            
-            # 找到该时间点之前的最后一个通信记录
-            current_links = []
-            
-            # 安全获取通信链接
-            for t, l in self.active_links:
-                if t <= current_time:
-                    if isinstance(l, list):  # 确保l是一个列表
-                        current_links = l
-                    break
-                
-            # 创建图形
-            fig = plt.figure(figsize=(12, 8))
-            gs = fig.add_gridspec(1, 5)
-            ax = fig.add_subplot(gs[0, :4])
-            info_ax = fig.add_subplot(gs[0, 4])
-            
-            # 创建通信网络图
-            G = nx.Graph()
-            
-            # 添加无人机节点
-            for i in range(self.simulator.n_drones):
-                if not self.drone_positions[i]:
-                    continue
-                
-                # 找到最接近当前时间的位置记录
-                pos_times = np.array(self.timestamps)
-                if len(pos_times) == 0:
-                    continue
-                
-                closest_idx = np.argmin(np.abs(pos_times - current_time))
-                if closest_idx < len(self.drone_positions[i]):
-                    pos = self.drone_positions[i][closest_idx]
-                    # 只用2D坐标作为图形位置
-                    G.add_node(i, pos=(pos[0], pos[1]))
-            
-            # 添加通信链接
-            for i, j in current_links:
-                if i in G.nodes and j in G.nodes:
-                    G.add_edge(i, j)
-            
-            # 获取节点位置以便绘图
-            pos = nx.get_node_attributes(G, 'pos')
-            
-            # 计算整体边界框
-            if pos:
-                x_coords = [p[0] for p in pos.values()]
-                y_coords = [p[1] for p in pos.values()]
-                
-                # 添加一些边距
-                margin_x = max(50, (max(x_coords) - min(x_coords)) * 0.1)
-                margin_y = max(50, (max(y_coords) - min(y_coords)) * 0.1)
-                
-                # 计算边界
-                x_min, x_max = min(x_coords) - margin_x, max(x_coords) + margin_x
-                y_min, y_max = min(y_coords) - margin_y, max(y_coords) + margin_y
-                
-                # 确保边界框是正方形（保持比例）
-                width = x_max - x_min
-                height = y_max - y_min
-                if width > height:
-                    # 如果宽度大于高度，增加高度
-                    diff = (width - height) / 2
-                    y_min -= diff
-                    y_max += diff
-                else:
-                    # 如果高度大于宽度，增加宽度
-                    diff = (height - width) / 2
-                    x_min -= diff
-                    x_max += diff
-            else:
-                # 默认边界
-                x_min, x_max = 0, 500
-                y_min, y_max = 0, 500
-            
-            # 绘制节点（无人机）
-            for i, (x, y) in pos.items():
-                ax.scatter(x, y, s=200, color=plt.cm.tab10(i / 10), edgecolors='black', linewidths=1)
-                ax.text(x, y, f"{i}", horizontalalignment='center', verticalalignment='center', fontweight='bold')
-            
-            # 绘制边（通信链接）
-            for (i, j) in G.edges():
-                ax.plot([pos[i][0], pos[j][0]], [pos[i][1], pos[j][1]], 'b-', alpha=0.7, linewidth=1.5)
-            
-            # 显示信息面板
-            info_ax.axis('off')
-            metrics = self.simulator.metrics
-            
-            # 计算性能指标
-            try:
-                sent_packets = sum(1 for t in metrics.datapacket_generated_time if t <= current_time*1e6)
-            except AttributeError:
-                try:
-                    sent_packets = metrics.datapacket_generated_num
-                except AttributeError:
-                    sent_packets = 0
-                
-            try:
-                received_packets = sum(1 for t in metrics.deliver_time_dict.values() if t <= current_time*1e6)
-            except AttributeError:
-                try:
-                    received_packets = len(metrics.datapacket_arrived)
-                except AttributeError:
-                    received_packets = 0
-                
-            try:
-                total_collisions = sum(1 for t in metrics.collision_time if t <= current_time*1e6)
-            except AttributeError:
-                try:
-                    total_collisions = metrics.collision_num
-                except AttributeError:
-                    total_collisions = 0
-                
-            # 计算PDR
-            if sent_packets > 0:
-                pdr = received_packets / sent_packets * 100
-            else:
-                pdr = 0
-                
-            # 更新性能历史记录
-            performance_history['sent'].append(sent_packets)
-            performance_history['received'].append(received_packets)
-            performance_history['pdr'].append(pdr)
-            performance_history['collisions'].append(total_collisions)
-            
-            # 计算当前时间窗口内的碰撞
-            window_collisions = total_collisions - previous_collisions
-            previous_collisions = total_collisions
-            performance_history['window_collisions'].append(window_collisions)
-            
-            # 更新事件历史
-            if window_collisions > 0:
-                recent_events.append(f"t={current_time:.1f}s: {window_collisions} collisions")
-            
-            # 保留最近10个事件
-            recent_events = recent_events[-10:]
-            
-            # 绘制信息文本
-            info_text = (
-                f"Time: {current_time:.1f}s\n\n"
-                f"Network Summary:\n"
-                f"Nodes: {len(G.nodes)}\n"
-                f"Links: {len(G.edges)}\n\n"
-                f"Performance:\n"
-                f"PDR: {pdr:.1f}%\n"
-                f"Total Collisions: {total_collisions}\n\n"
-                f"Link Color Legend:\n"
-                f"Blue: Normal Link\n"
-            )
-            info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
-                        fontsize=12, verticalalignment='top')
-            
-            # 设置图形参数
-            ax.set_title(f'UAV Communication Network at t={current_time:.1f}s')
-            ax.set_xlabel('X (m)')
-            ax.set_ylabel('Y (m)')
-            
-            # 设置坐标轴范围
-            ax.set_xlim(x_min, x_max)
-            ax.set_ylim(y_min, y_max)
-            
-            # 确保图像尺寸适配
-            plt.tight_layout()
-            
-            # 保存图形
-            plt.savefig(os.path.join(self.output_dir, 'communications', f'comm_graph_{idx:04d}.png'), 
-                        dpi=200, bbox_inches='tight')
-            plt.close(fig)
-        
-        # 输出完成消息
-        print(f"Saved communication graphs for {len(time_points)} time points")
     
     def _generate_frame(self, time_idx, time_points, position_cache, metrics_cache):
         """
@@ -360,12 +182,14 @@ class SimulationVisualizer:
         stats_ax = fig.add_subplot(gs[1, 3])
         events_ax = fig.add_subplot(gs[2, 3])
         
-        # 绘制无人机和路径
+        # 获取当前帧中实际存在的无人机及其位置
+        active_drones = {}
         for i in range(self.simulator.n_drones):
-            if i not in position_cache[current_time]:
-                continue
-            
-            pos = position_cache[current_time][i]
+            if i in position_cache[current_time]:
+                active_drones[i] = position_cache[current_time][i]
+        
+        # 绘制3D轨迹
+        for i, pos in active_drones.items():
             ax.scatter(pos[0], pos[1], pos[2], color=f'C{i}', s=100, marker='o', label=f'UAV {i}')
             
             # 绘制UAV历史轨迹
@@ -379,31 +203,107 @@ class SimulationVisualizer:
                 ax.plot(past_positions[:, 0], past_positions[:, 1], past_positions[:, 2], 
                       color=f'C{i}', linestyle='-', alpha=0.7)
         
-        # 显示通信链接
-        link_time = None
+        # 清除之前的箭头
+        for arrow in self.arrows:
+            arrow.remove()
+        self.arrows = []
+        
+        # ===== Communication Links Display =====
         links = []
         
-        # 找到最接近当前时间的通信链接记录
+        # Try to find links from records
+        found_links = False
         for t, l in self.active_links:
             if t <= current_time:
-                link_time = t
                 links = l
+                found_links = True
+                break
         
-        # 绘制通信链接
-        if links and isinstance(links, list):  # 确保links是一个列表
-            for i, j in links:
-                if i in position_cache[current_time] and j in position_cache[current_time]:
-                    pos_i = position_cache[current_time][i]
-                    pos_j = position_cache[current_time][j]
-                    ax.plot([pos_i[0], pos_j[0]], [pos_i[1], pos_j[1]], [pos_i[2], pos_j[2]], 
-                          'k--', alpha=0.4, linewidth=1)
+        # Print debug info in English
+        if not found_links or not isinstance(links, list) or len(links) == 0:
+            print(f"Communication graph {idx}: No communication link data found, using simulated links")
+            
+            # Make sure links is list type
+            links = []
+            
+            # Create simulated links for testing visualization
+            # Connect all drones within 150m range
+            drone_ids = list(active_drones.keys())
+            for i in range(len(drone_ids)):
+                for j in range(i+1, len(drone_ids)):
+                    drone_i = drone_ids[i]
+                    drone_j = drone_ids[j]
+                    pos_i = np.array(active_drones[drone_i])
+                    pos_j = np.array(active_drones[drone_j])
+                    distance = np.linalg.norm(pos_i - pos_j)
+                    if distance < 150:  # 150m communication range
+                        links.append((drone_i, drone_j))
+        
+        # Display active links
+        active_links_text = "Active Links:\n"
+        for source, target in links:
+            if source in active_drones and target in active_drones:
+                start_pos = np.array(active_drones[source])
+                end_pos = np.array(active_drones[target])
+                
+                # Calculate direction vector
+                direction = end_pos - start_pos
+                
+                # Draw a line instead of using quiver
+                line = ax.plot([start_pos[0], end_pos[0]], 
+                              [start_pos[1], end_pos[1]], 
+                              [start_pos[2], end_pos[2]], 
+                              'b-', alpha=0.7, linewidth=2)[0]
+                self.arrows.append(line)
+                
+                # Add small arrow in the middle to show direction
+                mid_point = start_pos + direction * 0.7
+                arrow_size = 20  # Adjust size as needed
+                
+                # Normalize direction for the arrow
+                dir_norm = direction / np.linalg.norm(direction) * arrow_size
+                
+                # Create arrow at the end of the line
+                arrow = ax.quiver(mid_point[0], mid_point[1], mid_point[2],
+                                 dir_norm[0], dir_norm[1], dir_norm[2],
+                                 color='blue', arrow_length_ratio=0.3)
+                self.arrows.append(arrow)
+                
+                active_links_text += f"UAV {source} → UAV {target}\n"
+        
+        # Update active links text
+        if hasattr(self, 'links_text'):
+            self.links_text.set_text(active_links_text)
+        else:
+            self.links_text = ax.text2D(0.02, 0.02, active_links_text, transform=ax.transAxes,
+                                            bbox=dict(facecolor='white', alpha=0.7))
+        
+        # Add simulation status text
+        status_text = f"Simulation Status\nFrame {idx}/{len(time_points)}"
+        if hasattr(self, 'status_text'):
+            self.status_text.set_text(status_text)
+        else:
+            self.status_text = fig.text(0.85, 0.15, status_text, 
+                                           bbox=dict(facecolor='white', alpha=0.7))
         
         # 设置图表标题和标签
         ax.set_title(f'UAV Network Simulation at t={current_time:.1f}s')
         ax.set_xlabel('X (m)')
         ax.set_ylabel('Y (m)')
         ax.set_zlabel('Z (m)')
-        ax.legend()
+        
+        # 创建自定义图例
+        from matplotlib.lines import Line2D
+        custom_lines = [
+            Line2D([0], [0], color='b', linestyle='-', lw=3.0),
+            Line2D([0], [0], color='r', lw=2.0),
+        ]
+        legend_labels = ['Communication Links', 'Data Transmission Direction']
+        
+        # 获取现有图例并合并
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles + custom_lines, labels + legend_labels, 
+                loc='upper right', fontsize=8)
         
         # 优化3D视图
         x_min, x_max = 0, 500
@@ -619,41 +519,6 @@ class SimulationVisualizer:
                 
                 print(f"Created animation: {gif_path}")
                 
-            # 创建通信网络动画
-            comm_frames_path = os.path.join(self.output_dir, 'communications')
-            comm_frames = sorted([os.path.join(comm_frames_path, f) for f in os.listdir(comm_frames_path) 
-                                if f.endswith('.png')])
-            
-            if comm_frames:
-                print(f"Creating communication network animation from {len(comm_frames)} frames...")
-                comm_gif_path = os.path.join(self.output_dir, 'communication_network.gif')
-                
-                # 确保所有帧具有相同的尺寸
-                standard_size = None
-                resized_comm_frames = []
-                
-                for frame_path in comm_frames:
-                    img = Image.open(frame_path)
-                    if standard_size is None:
-                        standard_size = img.size
-                    
-                    # 如果尺寸不同，则调整为标准尺寸
-                    if img.size != standard_size:
-                        img = img.resize(standard_size, Image.LANCZOS)
-                    
-                    resized_comm_frames.append(img)
-                
-                # 使用PIL保存GIF
-                resized_comm_frames[0].save(
-                    comm_gif_path, 
-                    save_all=True, 
-                    append_images=resized_comm_frames[1:], 
-                    duration=int(1000/fps), 
-                    loop=0
-                )
-                
-                print(f"Created communication network animation: {comm_gif_path}")
-                
         except Exception as e:
             print(f"Error creating animation: {e}")
             import traceback
@@ -695,9 +560,6 @@ class SimulationVisualizer:
         
         # 保存帧可视化
         self.save_frame_visualization()
-        
-        # 保存通信图 - 现在已修复，不再需要额外参数
-        self.save_communication_graph()
         
         # 创建动画
         self.create_animations()
