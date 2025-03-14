@@ -73,3 +73,35 @@ class Simulator:
         scatter_plot(self)
 
         self.metrics.print_metrics()
+
+    def add_communication_tracking(self, visualizer):
+        """添加对通信事件的跟踪"""
+        self.visualizer = visualizer
+        
+        # 保存原始的unicast_put方法
+        original_unicast_put = self.channel.unicast_put
+        
+        # 重写unicast_put方法以跟踪通信
+        def tracked_unicast_put(message, dst_drone_id):
+            # 调用原始方法
+            result = original_unicast_put(message, dst_drone_id)
+            
+            # 记录通信事件
+            packet, _, src_drone_id, _ = message
+            
+            # 添加包类型区分
+            packet_id = packet.packet_id
+            packet_type = "DATA"
+            
+            # 判断不同类型的packet
+            if packet_id >= 20000:
+                packet_type = "ACK"
+            elif packet_id >= 10000:
+                packet_type = "HELLO"
+            
+            self.visualizer.track_communication(src_drone_id, dst_drone_id, packet_id, packet_type)
+            
+            return result
+        
+        # 替换方法
+        self.channel.unicast_put = tracked_unicast_put
