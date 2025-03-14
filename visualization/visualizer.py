@@ -22,7 +22,7 @@ class SimulationVisualizer:
     可视化UAV网络仿真过程，包括移动轨迹和通信状态
     """
     
-    def __init__(self, simulator, output_dir="visualization_results"):
+    def __init__(self, simulator, output_dir="log_results"):
         """
         初始化可视化器
         
@@ -145,12 +145,6 @@ class SimulationVisualizer:
     def _generate_frame(self, time_idx, time_points, position_cache, metrics_cache):
         """
         生成单个可视化帧的辅助方法
-        
-        参数:
-            time_idx: 时间点索引
-            time_points: 所有时间点列表
-            position_cache: 预计算的位置缓存
-            metrics_cache: 预计算的指标缓存
         """
         current_time = time_points[time_idx]
         idx = time_idx  # 保持索引为文件命名
@@ -188,148 +182,69 @@ class SimulationVisualizer:
             if i in position_cache[current_time]:
                 active_drones[i] = position_cache[current_time][i]
         
-        # 绘制3D轨迹
-        for i, pos in active_drones.items():
-            ax.scatter(pos[0], pos[1], pos[2], color=f'C{i}', s=100, marker='o', label=f'UAV {i}')
+        # 绘制无人机位置
+        for drone_id, position in active_drones.items():
+            x, y, z = position
+            color = self.colors[drone_id % len(self.colors)]
             
-            # 绘制UAV历史轨迹
-            past_positions = []
-            for t in time_points[:time_idx+1]:
-                if i in position_cache[t]:
-                    past_positions.append(position_cache[t][i])
+            # 绘制散点而不添加标签(以便不生成图例)
+            ax.scatter(x, y, z, c=[color], s=50, alpha=1.0)
             
-            if past_positions:
-                past_positions = np.array(past_positions)
-                ax.plot(past_positions[:, 0], past_positions[:, 1], past_positions[:, 2], 
-                      color=f'C{i}', linestyle='-', alpha=0.7)
+            # 直接在无人机旁边添加ID文本，增大字体大小
+            ax.text(x, y, z, f"{drone_id}", color='black', fontsize=18, 
+                    ha='center', va='bottom', weight='bold', 
+                    bbox=dict(facecolor='white', alpha=0.8, pad=2, edgecolor='black'))
         
-        # 清除之前的箭头
-        for arrow in self.arrows:
-            arrow.remove()
-        self.arrows = []
+        # 绘制通信链路
+        for link_idx, (src_id, dst_id) in enumerate(self.active_links):
+            link_time = self.link_timestamps[link_idx]
+            # 只显示当前时间点附近的链路
+            time_diff = abs(link_time - current_time)
+            if time_diff <= 0.05:  # 显示50ms内的链路
+                if src_id in active_drones and dst_id in active_drones:
+                    src_pos = active_drones[src_id]
+                    dst_pos = active_drones[dst_id]
+                    
+                    # 绘制通信链路线
+                    ax.plot([src_pos[0], dst_pos[0]], 
+                            [src_pos[1], dst_pos[1]], 
+                            [src_pos[2], dst_pos[2]], 'b-', linewidth=1.5)
+                    
+                    # 添加箭头方向表示数据流向
+                    arrow_pos = [(src_pos[0] + dst_pos[0])/2, 
+                                (src_pos[1] + dst_pos[1])/2, 
+                                (src_pos[2] + dst_pos[2])/2]
+                    arrow_direction = [dst_pos[0] - src_pos[0], 
+                                    dst_pos[1] - src_pos[1], 
+                                    dst_pos[2] - src_pos[2]]
+                    length = np.sqrt(sum([d**2 for d in arrow_direction]))
+                    arrow_direction = [d/length * 15 for d in arrow_direction]  # 标准化并缩放
+                    
+                    # 添加通信方向箭头
+                    ax.quiver(arrow_pos[0], arrow_pos[1], arrow_pos[2], 
+                            arrow_direction[0], arrow_direction[1], arrow_direction[2], 
+                            color='r', arrow_length_ratio=0.3, linewidth=1.5)
         
-        # ===== Communication Links Display =====
-        links = []
+        # 添加通信链路图例但不包含无人机
+        ax.plot([], [], 'b-', label='Communication Links')
+        ax.plot([], [], 'r-', label='Data Transmission Direction')
+        ax.legend(loc='upper right', fontsize=8)
         
-        # Try to find links from records
-        found_links = False
-        for t, l in self.active_links:
-            if t <= current_time:
-                links = l
-                found_links = True
-                break
-        
-        # Print debug info in English
-        if not found_links or not isinstance(links, list) or len(links) == 0:
-            print(f"Communication graph {idx}: No communication link data found, using simulated links")
-            
-            # Make sure links is list type
-            links = []
-            
-            # Create simulated links for testing visualization
-            # Connect all drones within 150m range
-            drone_ids = list(active_drones.keys())
-            for i in range(len(drone_ids)):
-                for j in range(i+1, len(drone_ids)):
-                    drone_i = drone_ids[i]
-                    drone_j = drone_ids[j]
-                    pos_i = np.array(active_drones[drone_i])
-                    pos_j = np.array(active_drones[drone_j])
-                    distance = np.linalg.norm(pos_i - pos_j)
-                    if distance < 150:  # 150m communication range
-                        links.append((drone_i, drone_j))
-        
-        # Display active links
-        active_links_text = "Active Links:\n"
-        for source, target in links:
-            if source in active_drones and target in active_drones:
-                start_pos = np.array(active_drones[source])
-                end_pos = np.array(active_drones[target])
-                
-                # Calculate direction vector
-                direction = end_pos - start_pos
-                
-                # Draw a line instead of using quiver
-                line = ax.plot([start_pos[0], end_pos[0]], 
-                              [start_pos[1], end_pos[1]], 
-                              [start_pos[2], end_pos[2]], 
-                              'b-', alpha=0.7, linewidth=2)[0]
-                self.arrows.append(line)
-                
-                # Add small arrow in the middle to show direction
-                mid_point = start_pos + direction * 0.7
-                arrow_size = 20  # Adjust size as needed
-                
-                # Normalize direction for the arrow
-                dir_norm = direction / np.linalg.norm(direction) * arrow_size
-                
-                # Create arrow at the end of the line
-                arrow = ax.quiver(mid_point[0], mid_point[1], mid_point[2],
-                                 dir_norm[0], dir_norm[1], dir_norm[2],
-                                 color='blue', arrow_length_ratio=0.3)
-                self.arrows.append(arrow)
-                
-                active_links_text += f"UAV {source} → UAV {target}\n"
-        
-        # Update active links text
-        if hasattr(self, 'links_text'):
-            self.links_text.set_text(active_links_text)
-        else:
-            self.links_text = ax.text2D(0.02, 0.02, active_links_text, transform=ax.transAxes,
-                                            bbox=dict(facecolor='white', alpha=0.7))
-        
-        # Add simulation status text
-        status_text = f"Simulation Status\nFrame {idx}/{len(time_points)}"
-        if hasattr(self, 'status_text'):
-            self.status_text.set_text(status_text)
-        else:
-            self.status_text = fig.text(0.85, 0.15, status_text, 
-                                           bbox=dict(facecolor='white', alpha=0.7))
-        
-        # 设置图表标题和标签
-        ax.set_title(f'UAV Network Simulation at t={current_time:.1f}s')
+        # 设置图形标题和轴标签
+        ax.set_title(f'UAV Network Simulation at t={current_time:.2f}s')
         ax.set_xlabel('X (m)')
         ax.set_ylabel('Y (m)')
         ax.set_zlabel('Z (m)')
         
-        # 创建自定义图例
-        from matplotlib.lines import Line2D
-        custom_lines = [
-            Line2D([0], [0], color='b', linestyle='-', lw=3.0),
-            Line2D([0], [0], color='r', lw=2.0),
-        ]
-        legend_labels = ['Communication Links', 'Data Transmission Direction']
+        # 设置坐标轴范围
+        ax.set_xlim(0, config.MAP_LENGTH)
+        ax.set_ylim(0, config.MAP_WIDTH)
+        ax.set_zlim(0, config.MAP_HEIGHT)
         
-        # 获取现有图例并合并
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles + custom_lines, labels + legend_labels, 
-                loc='upper right', fontsize=8)
+        # 添加网格
+        ax.grid(True)
         
-        # 优化3D视图
-        x_min, x_max = 0, 500
-        y_min, y_max = 300, 650
-        z_min, z_max = 150, 350
-        
-        # 根据实际坐标数据调整视图范围
-        pos_data = []
-        for i in range(self.simulator.n_drones):
-            if i in position_cache[current_time]:
-                pos_data.append(position_cache[current_time][i])
-        
-        if pos_data:
-            pos_data = np.array(pos_data)
-            
-            # 添加一些边距
-            margin = 50
-            x_min, x_max = min(pos_data[:, 0]) - margin, max(pos_data[:, 0]) + margin
-            y_min, y_max = min(pos_data[:, 1]) - margin, max(pos_data[:, 1]) + margin
-            z_min, z_max = min(pos_data[:, 2]) - margin, max(pos_data[:, 2]) + margin
-        
-        ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_min, y_max)
-        ax.set_zlim(z_min, z_max)
-        
-        # 绘制性能信息面板
+        # 更新信息面板
         info_ax.axis('off')
         info_text = (
             f"Simulation Time: {current_time:.2f}s\n\n"
@@ -370,7 +285,7 @@ class SimulationVisualizer:
         events_ax.axis('off')
         events_ax.set_title('Simulation Status')
         events_ax.text(0.05, 0.95, f"Frame {idx+1}/{len(time_points)}", 
-                     transform=events_ax.transAxes, fontsize=10, verticalalignment='top')
+                    transform=events_ax.transAxes, fontsize=10, verticalalignment='top')
         
         # 确保布局一致
         plt.tight_layout()
@@ -379,9 +294,6 @@ class SimulationVisualizer:
         output_path = os.path.join(self.output_dir, 'frames', f'frame_{idx:04d}.png')
         plt.savefig(output_path, dpi=100, bbox_inches=None)  # 不使用tight以保证固定大小
         plt.close(fig)
-        plt.close('all')  # 确保所有图形对象都被释放
-        
-        return idx
         
     def save_frame_visualization(self, interval=0.5):
         """
@@ -503,10 +415,10 @@ class SimulationVisualizer:
                     
                     resized_frames.append(img)
                 
-                # 设置帧率
-                fps = 10
+                # 设置帧率 - 减半
+                fps = 5  # 原来是10
                 if len(frames) > 100:
-                    fps = 15
+                    fps = 8  # 原来是15
                 
                 # 使用PIL保存GIF
                 resized_frames[0].save(

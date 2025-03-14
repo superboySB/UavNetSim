@@ -61,4 +61,4 @@ instance/
 *.log
 
 # 输出目录
-visualization_results/
+log_results/
