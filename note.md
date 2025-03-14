@@ -153,7 +153,8 @@ def update_q_table(self, packet, next_hop_id):
 ### 5. 探索与利用
 - **ε-贪心策略**：以一定概率随机选择下一跳，以探索新路径
 - **自适应学习率**：根据网络条件动态调整学习率
-- **初始Q值设置**：所有Q值初始化为较高值，鼓励探索未知路径
+- **初始Q值设置**：所有Q值初始化为较高值（例如30000），鼓励探索未知路径
+- **邻居有效性检查**：使用生存时间（entry_life_time）机制维护有效邻居
 
 ### 6. 高级特性
 - **处理拓扑变化**：快速适应无人机移动导致的拓扑变化
@@ -172,3 +173,90 @@ def update_q_table(self, packet, next_hop_id):
 - **探索-利用权衡**：如何平衡已知最佳路径与探索新路径
 - **状态空间爆炸**：在大规模网络中Q表可能变得庞大
 - **非稳态环境**：拓扑频繁变化可能导致学习速度跟不上环境变化
+
+## 五、QGeo路由算法
+
+### 1. 基本思想
+- **混合架构**：结合地理位置信息与Q-learning强化学习
+- **状态空间**：包含无人机位置、速度等地理信息的增强状态空间
+- **动作空间**：选择邻居节点作为下一跳
+- **Q值含义**：Q(s,d,n)表示从当前节点s通过邻居n到达目标d的估计价值
+
+### 2. 地理信息整合
+- **位置预测**：根据无人机当前位置和速度预测未来位置
+- **链接持久性**：评估通信链接在未来时刻的可靠性
+- **距离计算**：使用三维欧氏距离计算无人机之间的距离
+- **通信范围感知**：根据最大通信范围动态调整决策
+
+### 3. 学习机制
+- **基于未来位置的折扣因子**：根据预测的未来位置动态调整折扣因子
+- **奖励函数**：结合传输成功率和链路质量设计奖励
+- **Hello包增强**：Hello包携带位置和速度信息，用于更新邻居表
+- **邻居表结构**：`neighbor_table[drone_id] = [position, velocity, timestamp]`
+
+### 4. Q值更新流程
+1. 无人机x有发往目的地d的数据包
+2. 查询Q表选择合适的邻居y作为下一跳
+3. 将数据包传输给y
+4. 当接收到ACK包时，获取以下信息：
+   - reward：根据传输质量计算的奖励
+   - max_q：从下一跳可获得的最大Q值
+5. 预测未来位置以计算动态折扣因子gamma
+6. 使用以下公式更新Q值：
+   ```
+   Q_x(d,y) = (1-α)·Q_x(d,y) + α·(reward + gamma·(1-f)·max_q)
+   ```
+   其中f表示是否已到达目的地(f=1为已到达)
+
+### 5. 代码实现核心
+```python
+def update_q_table(self, packet, next_hop_id, next_hop_coords, next_hop_velocity):
+    data_packet_acked = packet.acked_packet
+    dst_drone = data_packet_acked.dst_drone
+
+    reward = packet.reward
+    max_q = packet.max_q
+
+    # 计算奖励函数
+    if next_hop_id == dst_drone.identifier:
+        f = 1
+    else:
+        f = 0
+
+    # 计算动态折扣因子
+    t = (math.ceil(self.simulator.env.now / self.hello_interval) * 
+         self.hello_interval - self.simulator.env.now) / 1e6
+    future_pos_myself = self.my_drone.coords + [i * t for i in self.my_drone.velocity]
+    future_pos_next_hop = next_hop_coords + [i * t for i in next_hop_velocity]
+    future_distance = util_function.euclidean_distance_3d(future_pos_myself, future_pos_next_hop)
+
+    if future_distance < maximum_communication_range():
+        gamma = 0.6  # 预计未来仍在通信范围内
+    else:
+        gamma = 0.4  # 预计未来可能超出通信范围
+
+    # Q值更新公式
+    self.table.q_table[next_hop_id][dst_drone.identifier] = \
+        (1 - self.learning_rate) * self.table.q_table[next_hop_id][dst_drone.identifier] + \
+        self.learning_rate * (reward + gamma * (1 - f) * max_q)
+```
+
+### 6. 高级特性
+- **位置感知决策**：根据无人机相对位置和移动趋势做出更智能的路由决策
+- **预测未来连接**：通过预测未来位置关系，避免选择即将断开连接的路径
+- **自适应折扣因子**：根据链路持久性动态调整折扣因子，提高长期决策质量
+- **快速适应拓扑变化**：能够迅速调整路由策略应对频繁的拓扑变化
+
+### 7. 与Q-routing比较
+- **状态表示**：QGeo包含更丰富的地理位置信息，而Q-routing主要关注节点标识
+- **未来预测**：QGeo能预测未来位置关系，Q-routing主要基于当前观测
+- **折扣策略**：QGeo使用动态折扣因子，Q-routing通常使用固定折扣
+- **适用场景**：QGeo更适合高速移动的无人机网络，Q-routing适合相对稳定的网络
+- **收敛速度**：QGeo在高动态环境中通常能更快收敛到可用策略
+
+### 8. 挑战与优化方向
+- **计算复杂度**：需要额外计算未来位置，增加了计算开销
+- **参数调优**：折扣因子阈值(0.6/0.4)需要根据具体场景调整
+- **平衡地理与学习信息**：如何有效整合地理信息和Q学习结果
+- **处理预测不准确**：当移动模式突变时，位置预测可能不准确
+- **扩展性研究**：与其他移动预测算法的结合潜力

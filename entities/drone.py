@@ -79,13 +79,17 @@ class Drone:
     Updated at: 2025/2/24
     """
 
-    def __init__(self,
-                 env,
-                 node_id,
-                 coords,
-                 speed,
-                 inbox,
-                 simulator):
+    def __init__(self, env, node_id, coords, speed, inbox, simulator, routing_protocol="greedy"):
+        """
+        Initialize the drone
+        :param env: simpy environment
+        :param node_id: identifier of the drone
+        :param coords: coordinates of the drone (x, y, z)
+        :param speed: speed (m/s)
+        :param inbox: inbox of the drone
+        :param simulator: simulation platform
+        :param routing_protocol: routing protocol to use (greedy, q_routing, qgeo, etc.)
+        """
         self.simulator = simulator
         self.env = env
         self.identifier = node_id
@@ -118,7 +122,23 @@ class Drone:
         self.mac_process_count = 0
         self.enable_blocking = 1  # enable "stop-and-wait" protocol
 
-        self.routing_protocol = Greedy(self.simulator, self)
+        # Initialize routing protocol based on provided parameter
+        if routing_protocol == "q_routing":
+            self.routing_protocol = QRouting(simulator, self)
+        elif routing_protocol == "qgeo":
+            from routing.qgeo.qgeo import QGeo  # 可能需要导入
+            self.routing_protocol = QGeo(simulator, self)
+        elif routing_protocol == "greedy":
+            self.routing_protocol = Greedy(simulator, self)
+        elif routing_protocol == "dsdv":
+            self.routing_protocol = Dsdv(simulator, self)
+        elif routing_protocol == "grad":
+            self.routing_protocol = Grad(simulator, self)
+        elif routing_protocol == "opar":
+            self.routing_protocol = Opar(simulator, self)
+        else:
+            # 默认使用Greedy
+            self.routing_protocol = Greedy(simulator, self)
 
         self.mobility_model = GaussMarkov3D(self)
         # self.motion_controller = VfMotionController(self)

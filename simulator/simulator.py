@@ -6,6 +6,12 @@ from simulator.metrics import Metrics
 from mobility import start_coords
 from utils import config
 from visualization.scatter import scatter_plot
+from routing.q_routing.q_routing import QRouting
+from routing.qgeo.qgeo import QGeo
+from routing.greedy.greedy import Greedy
+from routing.dsdv.dsdv import Dsdv
+from routing.grad.grad import Grad
+from routing.opar.opar import Opar
 
 
 class Simulator:
@@ -31,6 +37,7 @@ class Simulator:
                  env,
                  channel_states,
                  n_drones,
+                 routing_protocol="greedy",  # 默认使用greedy路由
                  total_simulation_time=config.SIM_TIME):
 
         self.env = env
@@ -40,6 +47,7 @@ class Simulator:
         self.n_drones = n_drones  # total number of drones in the simulation
         self.channel_states = channel_states
         self.channel = Channel(self.env)
+        self.routing_protocol = routing_protocol  # 保存路由协议选择
 
         self.metrics = Metrics(self)  # use to record the network performance
 
@@ -54,7 +62,8 @@ class Simulator:
 
             print('UAV: ', i, ' initial location is at: ', start_position[i], ' speed is: ', speed)
             drone = Drone(env=env, node_id=i, coords=start_position[i], speed=speed,
-                          inbox=self.channel.create_inbox_for_receiver(i), simulator=self)
+                          inbox=self.channel.create_inbox_for_receiver(i), simulator=self, 
+                          routing_protocol=self.routing_protocol)  # 传递路由协议参数
             self.drones.append(drone)
 
         scatter_plot(self)
