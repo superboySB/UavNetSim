@@ -1,0 +1,8 @@
+Totally send: 1100 data packets
+Packet delivery ratio is: 48.0 %
+Average end-to-end delay is: 169.12850757575757 ms
+Routing load is: 0.0
+Average throughput is: 1054221.5274620391 Kbps
+Average hop count is: 1.7708333333333333
+Collision num is: 0
+Average mac delay is: 4.228767914438504 ms

@@ -58,7 +58,7 @@ instance/
 .webassets-cache
 
 # 日志文件
-*.log
+# *.log
 
 # 输出目录
 log_results/
