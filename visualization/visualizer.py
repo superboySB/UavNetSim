@@ -6,6 +6,13 @@ import networkx as nx
 import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import Axes3D
 from PIL import Image
+import tqdm
+
+# 定义顶级函数 (在类外部定义，使其可以被pickle)
+def process_frame_wrapper(args):
+    """适用于多处理的包装函数，调用实例方法"""
+    visualizer_obj, time_idx, time_points, position_cache, metrics_cache = args
+    return visualizer_obj._generate_frame(time_idx, time_points, position_cache, metrics_cache)
 
 class SimulationVisualizer:
     """
@@ -40,6 +47,10 @@ class SimulationVisualizer:
         # 添加碰撞和丢包事件跟踪
         self.collision_events = []
         self.packet_drop_events = []
+        
+        # 存储PDR历史记录用于绘制动态折线图
+        self.pdr_history = []
+        self.time_history = []
         
     def track_drone_positions(self):
         """
@@ -129,32 +140,35 @@ class SimulationVisualizer:
         }
         recent_events = []
         
+        # 确保目录存在
+        comm_dir = os.path.join(self.output_dir, 'communications')
+        os.makedirs(comm_dir, exist_ok=True)
+        
+        # 为每个时间点创建通信图
         for idx, current_time in enumerate(time_points):
-            # 创建图形 - 使用子图以便添加指标面板
-            fig = plt.figure(figsize=(14, 10))
-            gs = fig.add_gridspec(1, 4)
-            ax = fig.add_subplot(gs[0, :3])
-            info_ax = fig.add_subplot(gs[0, 3])
+            if idx % 5 == 0:
+                print(f"Saving communication graph {idx+1}/{len(time_points)} at time {current_time:.1f}s")
             
-            # 创建网络图
-            G = nx.DiGraph()
+            # 找到该时间点之前的最后一个通信记录
+            current_links = []
             
-            # 添加所有无人机节点
-            for i in range(self.simulator.n_drones):
-                G.add_node(i)
+            # 安全获取通信链接
+            for t, l in self.active_links:
+                if t <= current_time:
+                    if isinstance(l, list):  # 确保l是一个列表
+                        current_links = l
+                    break
+                
+            # 创建图形
+            fig = plt.figure(figsize=(12, 8))
+            gs = fig.add_gridspec(1, 5)
+            ax = fig.add_subplot(gs[0, :4])
+            info_ax = fig.add_subplot(gs[0, 4])
             
-            # 找出时间窗口内的通信链路
-            window_links = []
-            for link, timestamp in zip(self.active_links, self.link_timestamps):
-                if current_time - time_window <= timestamp <= current_time:
-                    window_links.append(link)
+            # 创建通信网络图
+            G = nx.Graph()
             
-            # 添加链路
-            for src, dst in window_links:
-                G.add_edge(src, dst)
-            
-            # 获取当前时间点的无人机位置
-            current_positions = {}
+            # 添加无人机节点
             for i in range(self.simulator.n_drones):
                 if not self.drone_positions[i]:
                     continue
@@ -166,80 +180,63 @@ class SimulationVisualizer:
                 
                 closest_idx = np.argmin(np.abs(pos_times - current_time))
                 if closest_idx < len(self.drone_positions[i]):
-                    x, y, _ = self.drone_positions[i][closest_idx]
-                    current_positions[i] = (x, y)
+                    pos = self.drone_positions[i][closest_idx]
+                    # 只用2D坐标作为图形位置
+                    G.add_node(i, pos=(pos[0], pos[1]))
             
-            if not current_positions:
-                continue
+            # 添加通信链接
+            for i, j in current_links:
+                if i in G.nodes and j in G.nodes:
+                    G.add_edge(i, j)
             
-            # 计算当前位置的边界
-            x_coords = [pos[0] for pos in current_positions.values()]
-            y_coords = [pos[1] for pos in current_positions.values()]
+            # 获取节点位置以便绘图
+            pos = nx.get_node_attributes(G, 'pos')
             
-            x_min, x_max = min(x_coords), max(x_coords)
-            y_min, y_max = min(y_coords), max(y_coords)
-            
-            # 添加边距
-            margin = max((x_max - x_min), (y_max - y_min)) * 0.1
-            if margin < 10:  # 确保最小边距
-                margin = 10
-            
-            x_min -= margin
-            x_max += margin
-            y_min -= margin
-            y_max += margin
-            
-            # 确保坐标范围不为零
-            if x_min == x_max:
-                x_min -= 10
-                x_max += 10
-            if y_min == y_max:
-                y_min -= 10
-                y_max += 10
-            
-            # 设置坐标轴范围（在绘制之前）
-            ax.set_xlim(x_min, x_max)
-            ax.set_ylim(y_min, y_max)
-            
-            # 确保图形是正方形，以保持比例一致
-            width = x_max - x_min
-            height = y_max - y_min
-            if width > height:
-                extra = (width - height) / 2
-                ax.set_ylim(y_min - extra, y_max + extra)
+            # 计算整体边界框
+            if pos:
+                x_coords = [p[0] for p in pos.values()]
+                y_coords = [p[1] for p in pos.values()]
+                
+                # 添加一些边距
+                margin_x = max(50, (max(x_coords) - min(x_coords)) * 0.1)
+                margin_y = max(50, (max(y_coords) - min(y_coords)) * 0.1)
+                
+                # 计算边界
+                x_min, x_max = min(x_coords) - margin_x, max(x_coords) + margin_x
+                y_min, y_max = min(y_coords) - margin_y, max(y_coords) + margin_y
+                
+                # 确保边界框是正方形（保持比例）
+                width = x_max - x_min
+                height = y_max - y_min
+                if width > height:
+                    # 如果宽度大于高度，增加高度
+                    diff = (width - height) / 2
+                    y_min -= diff
+                    y_max += diff
+                else:
+                    # 如果高度大于宽度，增加宽度
+                    diff = (height - width) / 2
+                    x_min -= diff
+                    x_max += diff
             else:
-                extra = (height - width) / 2
-                ax.set_xlim(x_min - extra, x_max + extra)
+                # 默认边界
+                x_min, x_max = 0, 500
+                y_min, y_max = 0, 500
             
-            # 绘制网络图
-            try:
-                nodes = nx.draw_networkx_nodes(G, current_positions, node_size=500, 
-                                       node_color=[to_rgba(self.colors[i]) for i in range(self.simulator.n_drones)],
-                                       ax=ax)
-                
-                # 获取链路效率信息
-                edge_colors = []
-                for src, dst in G.edges():
-                    edge_colors.append('blue')  # 默认为蓝色
-                
-                edges = nx.draw_networkx_edges(G, current_positions, width=2, alpha=0.7, arrows=True, 
-                                      arrowsize=15, arrowstyle='->', edge_color=edge_colors,
-                                      ax=ax)
-                
-                labels = nx.draw_networkx_labels(G, current_positions, font_size=12, font_weight='bold',
-                                       ax=ax)
-            except Exception as e:
-                print(f"Error drawing network: {e}")
-                continue
+            # 绘制节点（无人机）
+            for i, (x, y) in pos.items():
+                ax.scatter(x, y, s=200, color=plt.cm.tab10(i / 10), edgecolors='black', linewidths=1)
+                ax.text(x, y, f"{i}", horizontalalignment='center', verticalalignment='center', fontweight='bold')
             
-            # 确保绘图精确包含节点
-            ax.update_datalim([(x_min, y_min), (x_max, y_max)])
-            ax.autoscale_view()
+            # 绘制边（通信链接）
+            for (i, j) in G.edges():
+                ax.plot([pos[i][0], pos[j][0]], [pos[i][1], pos[j][1]], 'b-', alpha=0.7, linewidth=1.5)
             
-            # 获取当前时间点的性能指标
+            # 显示信息面板
+            info_ax.axis('off')
             metrics = self.simulator.metrics
             
-            # 尝试安全地获取数据包统计信息
+            # 计算性能指标
             try:
                 sent_packets = sum(1 for t in metrics.datapacket_generated_time if t <= current_time*1e6)
             except AttributeError:
@@ -247,7 +244,7 @@ class SimulationVisualizer:
                     sent_packets = metrics.datapacket_generated_num
                 except AttributeError:
                     sent_packets = 0
-            
+                
             try:
                 received_packets = sum(1 for t in metrics.deliver_time_dict.values() if t <= current_time*1e6)
             except AttributeError:
@@ -255,7 +252,7 @@ class SimulationVisualizer:
                     received_packets = len(metrics.datapacket_arrived)
                 except AttributeError:
                     received_packets = 0
-            
+                
             try:
                 total_collisions = sum(1 for t in metrics.collision_time if t <= current_time*1e6)
             except AttributeError:
@@ -263,33 +260,40 @@ class SimulationVisualizer:
                     total_collisions = metrics.collision_num
                 except AttributeError:
                     total_collisions = 0
-            
-            # 计算当前窗口内新增的碰撞数
-            window_collisions = total_collisions - previous_collisions
-            previous_collisions = total_collisions
-            
+                
             # 计算PDR
             if sent_packets > 0:
                 pdr = received_packets / sent_packets * 100
             else:
                 pdr = 0
                 
-            # 添加到历史记录 - 存储累计值
+            # 更新性能历史记录
             performance_history['sent'].append(sent_packets)
             performance_history['received'].append(received_packets)
             performance_history['pdr'].append(pdr)
             performance_history['collisions'].append(total_collisions)
+            
+            # 计算当前时间窗口内的碰撞
+            window_collisions = total_collisions - previous_collisions
+            previous_collisions = total_collisions
             performance_history['window_collisions'].append(window_collisions)
             
-            # 添加性能指标面板
-            info_ax.axis('off')
+            # 更新事件历史
+            if window_collisions > 0:
+                recent_events.append(f"t={current_time:.1f}s: {window_collisions} collisions")
+            
+            # 保留最近10个事件
+            recent_events = recent_events[-10:]
+            
+            # 绘制信息文本
             info_text = (
-                f"Simulation Time: {current_time:.2f}s\n\n"
-                f"Active Links: {len(window_links)}\n"
-                f"Sent Packets: {sent_packets}\n"
-                f"Received Packets: {received_packets}\n"
-                f"Packet Delivery Ratio: {pdr:.2f}%\n"
-                f"Collisions: {total_collisions}\n\n"
+                f"Time: {current_time:.1f}s\n\n"
+                f"Network Summary:\n"
+                f"Nodes: {len(G.nodes)}\n"
+                f"Links: {len(G.edges)}\n\n"
+                f"Performance:\n"
+                f"PDR: {pdr:.1f}%\n"
+                f"Total Collisions: {total_collisions}\n\n"
                 f"Link Color Legend:\n"
                 f"Blue: Normal Link\n"
             )
@@ -301,7 +305,7 @@ class SimulationVisualizer:
             ax.set_xlabel('X (m)')
             ax.set_ylabel('Y (m)')
             
-            # 重新确认轴的范围
+            # 设置坐标轴范围
             ax.set_xlim(x_min, x_max)
             ax.set_ylim(y_min, y_max)
             
@@ -312,11 +316,173 @@ class SimulationVisualizer:
             plt.savefig(os.path.join(self.output_dir, 'communications', f'comm_graph_{idx:04d}.png'), 
                         dpi=200, bbox_inches='tight')
             plt.close(fig)
-            
-            # 每5个图像输出一条进度消息
-            if idx % 5 == 0:
-                print(f"Saving communication graph {idx}/{len(time_points)} at time {current_time:.1f}s")
+        
+        # 输出完成消息
+        print(f"Saved communication graphs for {len(time_points)} time points")
     
+    def _generate_frame(self, time_idx, time_points, position_cache, metrics_cache):
+        """
+        生成单个可视化帧的辅助方法
+        
+        参数:
+            time_idx: 时间点索引
+            time_points: 所有时间点列表
+            position_cache: 预计算的位置缓存
+            metrics_cache: 预计算的指标缓存
+        """
+        current_time = time_points[time_idx]
+        idx = time_idx  # 保持索引为文件命名
+        
+        # 记录当前时间点的PDR数据用于绘制动态曲线
+        metrics_data = metrics_cache[current_time]
+        sent_packets = metrics_data['sent_packets']
+        received_packets = metrics_data['received_packets']
+        total_collisions = metrics_data['total_collisions']
+        
+        # 计算PDR
+        if sent_packets > 0:
+            pdr = received_packets / sent_packets * 100
+        else:
+            pdr = 0
+            
+        # 存储PDR历史数据
+        if time_idx > 0:
+            self.pdr_history.append(pdr)
+            self.time_history.append(current_time)
+
+        # 创建图形对象
+        fig = plt.figure(figsize=(15, 12))
+        
+        # 设置子图布局
+        gs = fig.add_gridspec(3, 4)
+        ax = fig.add_subplot(gs[:, :3], projection='3d')
+        info_ax = fig.add_subplot(gs[0, 3])
+        stats_ax = fig.add_subplot(gs[1, 3])
+        events_ax = fig.add_subplot(gs[2, 3])
+        
+        # 绘制无人机和路径
+        for i in range(self.simulator.n_drones):
+            if i not in position_cache[current_time]:
+                continue
+            
+            pos = position_cache[current_time][i]
+            ax.scatter(pos[0], pos[1], pos[2], color=f'C{i}', s=100, marker='o', label=f'UAV {i}')
+            
+            # 绘制UAV历史轨迹
+            past_positions = []
+            for t in time_points[:time_idx+1]:
+                if i in position_cache[t]:
+                    past_positions.append(position_cache[t][i])
+            
+            if past_positions:
+                past_positions = np.array(past_positions)
+                ax.plot(past_positions[:, 0], past_positions[:, 1], past_positions[:, 2], 
+                      color=f'C{i}', linestyle='-', alpha=0.7)
+        
+        # 显示通信链接
+        link_time = None
+        links = []
+        
+        # 找到最接近当前时间的通信链接记录
+        for t, l in self.active_links:
+            if t <= current_time:
+                link_time = t
+                links = l
+        
+        # 绘制通信链接
+        if links and isinstance(links, list):  # 确保links是一个列表
+            for i, j in links:
+                if i in position_cache[current_time] and j in position_cache[current_time]:
+                    pos_i = position_cache[current_time][i]
+                    pos_j = position_cache[current_time][j]
+                    ax.plot([pos_i[0], pos_j[0]], [pos_i[1], pos_j[1]], [pos_i[2], pos_j[2]], 
+                          'k--', alpha=0.4, linewidth=1)
+        
+        # 设置图表标题和标签
+        ax.set_title(f'UAV Network Simulation at t={current_time:.1f}s')
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_zlabel('Z (m)')
+        ax.legend()
+        
+        # 优化3D视图
+        x_min, x_max = 0, 500
+        y_min, y_max = 300, 650
+        z_min, z_max = 150, 350
+        
+        # 根据实际坐标数据调整视图范围
+        pos_data = []
+        for i in range(self.simulator.n_drones):
+            if i in position_cache[current_time]:
+                pos_data.append(position_cache[current_time][i])
+        
+        if pos_data:
+            pos_data = np.array(pos_data)
+            
+            # 添加一些边距
+            margin = 50
+            x_min, x_max = min(pos_data[:, 0]) - margin, max(pos_data[:, 0]) + margin
+            y_min, y_max = min(pos_data[:, 1]) - margin, max(pos_data[:, 1]) + margin
+            z_min, z_max = min(pos_data[:, 2]) - margin, max(pos_data[:, 2]) + margin
+        
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+        
+        # 绘制性能信息面板
+        info_ax.axis('off')
+        info_text = (
+            f"Simulation Time: {current_time:.2f}s\n\n"
+            f"Sent Packets: {sent_packets}\n"
+            f"Received Packets: {received_packets}\n"
+            f"Packet Delivery Ratio: {pdr:.2f}%\n"
+            f"Total Collisions: {total_collisions}\n"
+        )
+        info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
+                    fontsize=12, verticalalignment='top')
+        
+        # 绘制PDR折线图替代柱状图
+        stats_ax.clear()
+        
+        # 如果有足够的历史数据，绘制折线图
+        if len(self.time_history) > 1:
+            # 绘制PDR历史折线
+            stats_ax.plot(self.time_history, self.pdr_history, 'g-', linewidth=2)
+            
+            # 标记当前点
+            stats_ax.plot(current_time, pdr, 'ro', markersize=8)
+            
+            # 添加网格线和标签
+            stats_ax.grid(True, linestyle='--', alpha=0.7)
+            stats_ax.set_xlabel('Time (s)')
+            stats_ax.set_ylabel('PDR (%)')
+            stats_ax.set_title('Packet Delivery Ratio')
+            
+            # 设置y轴范围
+            stats_ax.set_ylim(0, 105)  # 给PDR留出一点空间
+        else:
+            # 如果没有足够的历史数据，绘制单个点
+            stats_ax.bar(['PDR'], [pdr], color='g')
+            stats_ax.set_ylabel('PDR (%)')
+            stats_ax.set_ylim(0, 105)
+        
+        # 显示事件
+        events_ax.axis('off')
+        events_ax.set_title('Simulation Status')
+        events_ax.text(0.05, 0.95, f"Frame {idx+1}/{len(time_points)}", 
+                     transform=events_ax.transAxes, fontsize=10, verticalalignment='top')
+        
+        # 确保布局一致
+        plt.tight_layout()
+        
+        # 保存为固定尺寸，确保所有图像大小一致
+        output_path = os.path.join(self.output_dir, 'frames', f'frame_{idx:04d}.png')
+        plt.savefig(output_path, dpi=100, bbox_inches=None)  # 不使用tight以保证固定大小
+        plt.close(fig)
+        plt.close('all')  # 确保所有图形对象都被释放
+        
+        return idx
+        
     def save_frame_visualization(self, interval=0.5):
         """
         保存帧可视化（定期快照）
@@ -330,39 +496,45 @@ class SimulationVisualizer:
         max_time = max(self.timestamps)
         time_points = np.arange(0, max_time + interval, interval)
         
-        # 跟踪性能指标 - 直接存储累计值
-        performance_history = {
-            'sent': [], 
-            'received': [], 
-            'pdr': [], 
-            'collisions': [],
-            'window_collisions': []  # 存储每个窗口新增的碰撞数
-        }
+        # 优化1: 如果帧数过多，自动增加间隔进行降采样
+        if len(time_points) > 100:
+            sampling_factor = len(time_points) // 100 + 1
+            time_points = time_points[::sampling_factor]
+            print(f"Too many frames, reducing from {len(time_points)*sampling_factor} to {len(time_points)} frames")
         
-        recent_events = []  # 用于存储最近的通信事件
-        previous_collisions = 0
+        # 创建frames目录（如果不存在）
+        frames_dir = os.path.join(self.output_dir, 'frames')
+        os.makedirs(frames_dir, exist_ok=True)
         
         total_frames = len(time_points)
         print(f"Starting frame generation: {total_frames} frames to create")
         
+        # 重置PDR历史数据
+        self.pdr_history = []
+        self.time_history = []
+        
+        # 预计算和缓存所有时间点的位置数据
+        position_cache = {}
         for idx, current_time in enumerate(time_points):
-            # 每5个图像输出一条进度消息，以便跟踪进度
-            if idx % 5 == 0:
-                print(f"Generating frame {idx+1}/{total_frames} at time {current_time:.1f}s")
-            
-            fig = plt.figure(figsize=(15, 12))
-            
-            # 创建主3D图和信息面板
-            gs = fig.add_gridspec(3, 4)
-            ax = fig.add_subplot(gs[:, :3], projection='3d')
-            info_ax = fig.add_subplot(gs[0, 3])
-            stats_ax = fig.add_subplot(gs[1, 3])
-            events_ax = fig.add_subplot(gs[2, 3])
-            
-            # 获取当前时间点的性能指标
+            position_cache[current_time] = {}
+            for i in range(self.simulator.n_drones):
+                if not self.drone_positions[i]:
+                    continue
+                
+                # 找到最接近当前时间的位置记录
+                pos_times = np.array(self.timestamps)
+                if len(pos_times) == 0:
+                    continue
+                    
+                closest_idx = np.argmin(np.abs(pos_times - current_time))
+                if closest_idx < len(self.drone_positions[i]):
+                    position_cache[current_time][i] = self.drone_positions[i][closest_idx]
+        
+        # 预计算和缓存性能指标
+        metrics_cache = {}
+        for idx, current_time in enumerate(time_points):
             metrics = self.simulator.metrics
             
-            # 安全获取数据包统计信息
             try:
                 sent_packets = sum(1 for t in metrics.datapacket_generated_time if t <= current_time*1e6)
             except AttributeError:
@@ -379,7 +551,6 @@ class SimulationVisualizer:
                 except AttributeError:
                     received_packets = 0
             
-            # 获取碰撞的累计总数
             try:
                 total_collisions = sum(1 for t in metrics.collision_time if t <= current_time*1e6)
             except AttributeError:
@@ -387,142 +558,20 @@ class SimulationVisualizer:
                     total_collisions = metrics.collision_num
                 except AttributeError:
                     total_collisions = 0
-            
-            # 计算当前窗口内新增的碰撞数
-            window_collisions = total_collisions - previous_collisions
-            previous_collisions = total_collisions
-            
-            # 计算PDR
-            if sent_packets > 0:
-                pdr = received_packets / sent_packets * 100
-            else:
-                pdr = 0
-                
-            # 添加到历史记录 - 存储累计值
-            performance_history['sent'].append(sent_packets)
-            performance_history['received'].append(received_packets)
-            performance_history['pdr'].append(pdr)
-            performance_history['collisions'].append(total_collisions)  # 存储累计碰撞数
-            performance_history['window_collisions'].append(window_collisions)  # 存储窗口增量
-            
-            # 绘制无人机和路径
-            for i in range(self.simulator.n_drones):
-                if not self.drone_positions[i]:
-                    continue
-                
-                # 找到最接近当前时间的位置记录
-                pos_times = np.array(self.timestamps)
-                if len(pos_times) == 0:
-                    continue
                     
-                closest_idx = np.argmin(np.abs(pos_times - current_time))
-                if closest_idx < len(self.drone_positions[i]):
-                    # 绘制无人机位置
-                    x, y, z = self.drone_positions[i][closest_idx]
-                    ax.scatter(x, y, z, color=self.colors[i], s=100, label=f'UAV {i}')
-                    
-                    # 绘制无人机轨迹
-                    if closest_idx > 0:
-                        x_history, y_history, z_history = zip(*self.drone_positions[i][:closest_idx+1])
-                        ax.plot(x_history, y_history, z_history, color=self.colors[i], linewidth=1.5, alpha=0.5)
+            metrics_cache[current_time] = {
+                'sent_packets': sent_packets,
+                'received_packets': received_packets,
+                'total_collisions': total_collisions
+            }
+        
+        # 直接使用单线程处理，不尝试多处理（避免错误消息）
+        for idx, current_time in enumerate(time_points):
+            if idx % max(1, total_frames // 10) == 0 or idx == total_frames-1:
+                print(f"Generating frame {idx+1}/{total_frames} at time {current_time:.1f}s")
             
-            # 绘制当前活跃的通信链路
-            for src, dst in self.active_links:
-                # 找到链路对应的时间戳
-                link_times = np.array(self.link_timestamps)
-                if len(link_times) == 0:
-                    continue
-                    
-                # 仅绘制当前时间窗口内的链路
-                valid_links = np.where((link_times <= current_time) & (link_times >= current_time - interval))[0]
-                
-                for link_idx in valid_links:
-                    src = self.active_links[link_idx][0]
-                    dst = self.active_links[link_idx][1]
-                    
-                    # 获取源节点和目标节点的位置
-                    src_times = np.array(self.timestamps)
-                    dst_times = np.array(self.timestamps)
-                    
-                    if len(src_times) == 0 or len(dst_times) == 0:
-                        continue
-                    
-                    src_idx = np.argmin(np.abs(src_times - current_time))
-                    dst_idx = np.argmin(np.abs(dst_times - current_time))
-                    
-                    if (src_idx < len(self.drone_positions[src]) and 
-                        dst_idx < len(self.drone_positions[dst])):
-                        
-                        src_pos = self.drone_positions[src][src_idx]
-                        dst_pos = self.drone_positions[dst][dst_idx]
-                        
-                        ax.plot([src_pos[0], dst_pos[0]], 
-                            [src_pos[1], dst_pos[1]], 
-                            [src_pos[2], dst_pos[2]], 
-                            'k-', alpha=0.7, linewidth=1.5)
-                        
-                        # 记录最近的通信事件
-                        recent_events.append(f"UAV {src} -> UAV {dst}")
-                        if len(recent_events) > 10:  # 限制事件列表长度
-                            recent_events.pop(0)
-            
-            # 设置3D图参数
-            ax.set_xlabel('X (m)')
-            ax.set_ylabel('Y (m)')
-            ax.set_zlabel('Z (m)')
-            ax.set_title(f'UAV Network Simulation at t={current_time:.1f}s')
-            ax.legend(loc='upper right')
-            
-            # 绘制性能信息面板
-            info_ax.axis('off')
-            info_text = (
-                f"Simulation Time: {current_time:.2f}s\n\n"
-                f"Sent Packets: {sent_packets}\n"
-                f"Received Packets: {received_packets}\n"
-                f"Packet Delivery Ratio: {pdr:.2f}%\n"
-                f"Total Collisions: {total_collisions}\n"
-                f"New Collisions: {window_collisions}\n"
-            )
-            info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
-                        fontsize=12, verticalalignment='top')
-            
-            # 绘制性能指标历史图表
-            stats_ax.plot(time_points[:idx+1], performance_history['pdr'], 'g-', label='PDR (%)')
-            stats_ax.set_ylabel('PDR (%)', color='g')
-            stats_ax.tick_params(axis='y', labelcolor='g')
-            stats_ax.set_ylim(0, 100)
-            
-            ax2 = stats_ax.twinx()
-            # 绘制累计碰撞数 - 直接使用存储的累计值
-            ax2.plot(time_points[:idx+1], performance_history['collisions'], 'r-', label='Collisions')
-            ax2.set_ylabel('Collision Count', color='r')
-            ax2.tick_params(axis='y', labelcolor='r')
-            
-            stats_ax.set_title('Network Performance Metrics')
-            stats_ax.set_xlabel('Time (s)')
-            
-            # 显示最近事件
-            events_ax.axis('off')
-            events_ax.set_title('Recent Communication Events')
-            
-            event_text = "\n".join(recent_events[-8:]) if recent_events else "No recent events"
-            events_ax.text(0.05, 0.95, event_text, transform=events_ax.transAxes,
-                        fontsize=10, verticalalignment='top')
-            
-            # 调整布局
-            plt.tight_layout()
-            
-            # 保存图形
-            plt.savefig(os.path.join(self.output_dir, 'frames', f'frame_{idx:04d}.png'), 
-                        dpi=200, bbox_inches='tight')
-            
-            # 确保内存管理：清除不再需要的大型对象
-            plt.close(fig)
-            fig = None  # 明确释放
-            ax = None
-            info_ax = None
-            stats_ax = None
-            events_ax = None
+            # 直接调用帧生成方法
+            self._generate_frame(idx, time_points, position_cache, metrics_cache)
         
         print(f"Completed all {total_frames} frames")
     
@@ -539,90 +588,76 @@ class SimulationVisualizer:
                 print(f"Creating animation from {len(frames)} frames...")
                 gif_path = os.path.join(self.output_dir, 'uav_simulation.gif')
                 
-                # 使用PIL创建GIF，但限制每批处理的图像数量以减少内存使用
-                batch_size = 20  # 每批处理的最大帧数
+                # 确保所有帧具有相同的尺寸
+                standard_size = None
+                resized_frames = []
                 
-                if len(frames) <= batch_size:
-                    # 如果帧数较少，直接创建GIF
-                    imgs = [Image.open(f) for f in frames]
-                    imgs[0].save(gif_path, save_all=True, append_images=imgs[1:], duration=200, loop=0)
-                else:
-                    # 如果帧数较多，分批处理
-                    first_img = Image.open(frames[0])
-                    first_img.save(gif_path, save_all=True, append_images=[], duration=200, loop=0)
+                for frame_path in frames:
+                    img = Image.open(frame_path)
+                    if standard_size is None:
+                        standard_size = img.size
                     
-                    for i in range(1, len(frames), batch_size):
-                        batch_end = min(i + batch_size, len(frames))
-                        batch = [Image.open(f) for f in frames[i:batch_end]]
-                        
-                        # 追加到现有GIF
-                        with open(gif_path, 'rb') as f:
-                            gif = Image.open(f)
-                            gif.seek(0)  # 回到开头
-                            frames_in_gif = 0
-                            try:
-                                while True:
-                                    frames_in_gif += 1
-                                    gif.seek(frames_in_gif)
-                            except EOFError:
-                                pass
-                        
-                        # 保存更新后的GIF
-                        first_img.save(gif_path, save_all=True, 
-                                    append_images=batch, duration=200, loop=0)
-                        
-                        print(f"Added frames {i}-{batch_end} to animation")
+                    # 如果尺寸不同，则调整为标准尺寸
+                    if img.size != standard_size:
+                        img = img.resize(standard_size, Image.LANCZOS)
+                    
+                    resized_frames.append(img)
+                
+                # 设置帧率
+                fps = 10
+                if len(frames) > 100:
+                    fps = 15
+                
+                # 使用PIL保存GIF
+                resized_frames[0].save(
+                    gif_path, 
+                    save_all=True, 
+                    append_images=resized_frames[1:], 
+                    duration=int(1000/fps), 
+                    loop=0
+                )
                 
                 print(f"Created animation: {gif_path}")
                 
-            # 创建通信网络动画 (同样使用批处理方法)
-            comm_path = os.path.join(self.output_dir, 'communications')
-            comm_frames = sorted([os.path.join(comm_path, f) for f in os.listdir(comm_path) if f.endswith('.png')])
+            # 创建通信网络动画
+            comm_frames_path = os.path.join(self.output_dir, 'communications')
+            comm_frames = sorted([os.path.join(comm_frames_path, f) for f in os.listdir(comm_frames_path) 
+                                if f.endswith('.png')])
             
             if comm_frames:
                 print(f"Creating communication network animation from {len(comm_frames)} frames...")
                 comm_gif_path = os.path.join(self.output_dir, 'communication_network.gif')
                 
-                # 使用PIL创建GIF，但限制每批处理的图像数量以减少内存使用
-                batch_size = 20  # 每批处理的最大帧数
+                # 确保所有帧具有相同的尺寸
+                standard_size = None
+                resized_comm_frames = []
                 
-                if len(comm_frames) <= batch_size:
-                    # 如果帧数较少，直接创建GIF
-                    comm_imgs = [Image.open(f) for f in comm_frames]
-                    comm_imgs[0].save(comm_gif_path, save_all=True, append_images=comm_imgs[1:], duration=200, loop=0)
-                else:
-                    # 如果帧数较多，分批处理
-                    first_img = Image.open(comm_frames[0])
-                    first_img.save(comm_gif_path, save_all=True, append_images=[], duration=200, loop=0)
+                for frame_path in comm_frames:
+                    img = Image.open(frame_path)
+                    if standard_size is None:
+                        standard_size = img.size
                     
-                    for i in range(1, len(comm_frames), batch_size):
-                        batch_end = min(i + batch_size, len(comm_frames))
-                        batch = [Image.open(f) for f in comm_frames[i:batch_end]]
-                        
-                        # 追加到现有GIF
-                        with open(comm_gif_path, 'rb') as f:
-                            gif = Image.open(f)
-                            gif.seek(0)  # 回到开头
-                            frames_in_gif = 0
-                            try:
-                                while True:
-                                    frames_in_gif += 1
-                                    gif.seek(frames_in_gif)
-                            except EOFError:
-                                pass
-                        
-                        # 保存更新后的GIF
-                        first_img.save(comm_gif_path, save_all=True, 
-                                    append_images=batch, duration=200, loop=0)
-                        
-                        print(f"Added frames {i}-{batch_end} to communication network animation")
+                    # 如果尺寸不同，则调整为标准尺寸
+                    if img.size != standard_size:
+                        img = img.resize(standard_size, Image.LANCZOS)
+                    
+                    resized_comm_frames.append(img)
+                
+                # 使用PIL保存GIF
+                resized_comm_frames[0].save(
+                    comm_gif_path, 
+                    save_all=True, 
+                    append_images=resized_comm_frames[1:], 
+                    duration=int(1000/fps), 
+                    loop=0
+                )
                 
                 print(f"Created communication network animation: {comm_gif_path}")
                 
         except Exception as e:
             print(f"Error creating animation: {e}")
             import traceback
-            traceback.print_exc()  # 打印完整的错误堆栈跟踪
+            traceback.print_exc()
     
     def run_visualization(self, tracking_interval=0.5, save_interval=1.0):
         """
@@ -654,11 +689,17 @@ class SimulationVisualizer:
     
     def finalize(self):
         """
-        完成可视化，保存所有图形
+        完成可视化处理并生成最终输出
         """
         print("Saving visualization results...")
-        self.save_trajectory_plot()
-        self.save_communication_graph()
+        
+        # 保存帧可视化
         self.save_frame_visualization()
+        
+        # 保存通信图 - 现在已修复，不再需要额外参数
+        self.save_communication_graph()
+        
+        # 创建动画
         self.create_animations()
-        print("Visualization completed! Results saved in directory:", self.output_dir)
+        
+        print("Visualization complete!")
