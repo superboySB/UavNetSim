@@ -1,0 +1,64 @@
+# Python 字节码文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C 扩展
+*.so
+
+# 打包与分发
+dist/
+build/
+*.egg-info/
+*.egg
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.env
+.venv
+env.bak/
+venv.bak/
+
+# 单元测试/覆盖率报告
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE 相关
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.pydevproject
+.spyderproject
+.spyproject
+
+# 操作系统相关
+.DS_Store
+Thumbs.db
+
+# 本地配置文件
+local_settings.py
+*.env
+instance/
+.webassets-cache
+
+# 日志文件
+*.log
+
+# 输出目录
+visualization_results/
