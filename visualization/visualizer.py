@@ -4,15 +4,15 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import tqdm
 from matplotlib.gridspec import GridSpec
-from utils import config  # 确保导入config模块
+from utils import config  # Ensure config module is imported
 from matplotlib.lines import Line2D  # Add this import
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
 
-# 添加3D箭头类定义，处理3D视图中的箭头，正确地实现do_3d_projection方法
+# Add 3D arrow class definition that handles arrows in 3D view, properly implementing do_3d_projection method
 class Arrow3D(FancyArrowPatch):
     """
-    用于在3D视图中绘制箭头的类
+    Class for drawing arrows in 3D view
     """
     def __init__(self, xs, ys, zs, *args, **kwargs):
         FancyArrowPatch.__init__(self, (0, 0), (0, 0), *args, **kwargs)
@@ -22,61 +22,61 @@ class Arrow3D(FancyArrowPatch):
         xs3d, ys3d, zs3d = self._verts3d
         xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
         self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
-        # 计算平均z值作为深度
+        # Calculate average z value as depth
         avg_z = np.mean(zs)
         return avg_z
         
     def draw(self, renderer):
         FancyArrowPatch.draw(self, renderer)
 
-# 定义顶级函数 (在类外部定义，使其可以被pickle)
+# Define top-level function (outside class to make it picklable)
 def process_frame_wrapper(args):
-    """适用于多处理的包装函数，调用实例方法"""
+    """Wrapper function for multiprocessing, calls instance method"""
     visualizer_obj, time_idx, time_points, position_cache, metrics_cache = args
     return visualizer_obj._generate_frame(time_idx, time_points, position_cache, metrics_cache)
 
 class SimulationVisualizer:
     """
-    可视化UAV网络仿真过程，包括移动轨迹和通信状态
+    Visualize UAV network simulation process, including movement trajectories and communication status
     """
     
     def __init__(self, simulator, output_dir="vis_results"):
         """
-        初始化可视化器
+        Initialize visualizer
         
-        参数:
-            simulator: 仿真器实例
-            output_dir: 输出目录
+        Parameters:
+            simulator: simulator instance
+            output_dir: output directory
         """
         self.simulator = simulator
         self.output_dir = output_dir
         
-        # 创建输出目录
+        # Create output directory
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(os.path.join(output_dir, "frames"), exist_ok=True)
         
-        # 初始化存储数据的结构
+        # Initialize data storage structures
         self.drone_positions = {i: [] for i in range(self.simulator.n_drones)}
         self.timestamps = []
         
-        # 增强通信事件的记录细节
-        self.comm_events = []  # 存储元组 (src_id, dst_id, packet_id, packet_type, timestamp)
+        # Enhance communication event recording details
+        self.comm_events = []  # Store tuples (src_id, dst_id, packet_id, packet_type, timestamp)
         
-        # 为每个UAV分配一个固定颜色
+        # Assign a fixed color to each UAV
         self.colors = plt.cm.tab10(np.linspace(0, 1, self.simulator.n_drones))
         
-        # 添加碰撞和丢包事件跟踪
+        # Add collision and packet drop event tracking
         self.collision_events = []
         self.packet_drop_events = []
         
-        # 存储PDR历史记录用于绘制动态折线图
+        # Store PDR history for dynamic line chart drawing
         self.pdr_history = []
         self.time_history = []
         
         # Initialize arrows list
         self.arrows = []
         
-        # 通信类型的颜色映射
+        # Color mapping for communication types
         self.comm_colors = {
             "DATA": "blue",
             "ACK": "green",
@@ -99,17 +99,17 @@ class SimulationVisualizer:
         self.ax.set_ylabel('Y (m)')
         self.ax.set_zlabel('Z (m)')
         
-        # 初始化碰撞计数
+        # Initialize collision count
         self.collision_count = 0
         
-        # 保存初始时间
+        # Save initial time
         self.start_time = self.simulator.env.now
     
     def track_drone_positions(self):
         """
-        记录当前无人机位置
+        Record current drone positions
         """
-        current_time = self.simulator.env.now / 1e6  # 转换为秒
+        current_time = self.simulator.env.now / 1e6  # Convert to seconds
         self.timestamps.append(current_time)
         
         for i, drone in enumerate(self.simulator.drones):
@@ -118,36 +118,36 @@ class SimulationVisualizer:
     
     def track_communication(self, src_id, dst_id, packet_id, packet_type="DATA"):
         """
-        记录通信事件
+        Record communication event
         
-        参数:
-            src_id: 源无人机ID
-            dst_id: 目标无人机ID
-            packet_id: 数据包ID
-            packet_type: 包类型 (DATA, ACK, HELLO)
+        Parameters:
+            src_id: source drone ID
+            dst_id: destination drone ID
+            packet_id: packet ID
+            packet_type: packet type (DATA, ACK, HELLO)
         """
-        current_time = self.simulator.env.now / 1e6  # 转换为秒
-        # 记录完整的通信事件信息
+        current_time = self.simulator.env.now / 1e6  # Convert to seconds
+        # Record complete communication event information
         self.comm_events.append((src_id, dst_id, packet_id, packet_type, current_time))
     
     def track_collision(self, location, time):
-        """记录碰撞事件"""
+        """Record collision event"""
         self.collision_events.append((location, time))
-        self.collision_count += 1  # 更新碰撞计数
+        self.collision_count += 1  # Update collision count
     
     def track_packet_drop(self, source_id, packet_id, reason, time):
-        """记录丢包事件"""
-        current_time = time / 1e6  # 转换为秒
+        """Record packet drop event"""
+        current_time = time / 1e6  # Convert to seconds
         self.packet_drop_events.append((source_id, packet_id, reason, current_time))
     
     def save_trajectory_plot(self):
         """
-        保存无人机轨迹图
+        Save drone trajectory plot
         """
         fig = plt.figure(figsize=(12, 10))
         ax = fig.add_subplot(111, projection='3d')
         
-        # 绘制每个无人机的轨迹
+        # Draw trajectory for each drone
         for i in range(self.simulator.n_drones):
             if not self.drone_positions[i]:
                 continue
@@ -155,89 +155,89 @@ class SimulationVisualizer:
             x, y, z = zip(*self.drone_positions[i])
             ax.plot(x, y, z, color=self.colors[i], label=f'UAV {i}', linewidth=2)
             
-            # 标记起点和终点
+            # Mark start and end points
             ax.scatter(x[0], y[0], z[0], color=self.colors[i], marker='o', s=100)
             ax.scatter(x[-1], y[-1], z[-1], color=self.colors[i], marker='s', s=100)
         
-        # 设置图形参数
+        # Set chart parameters
         ax.set_xlabel('X (m)')
         ax.set_ylabel('Y (m)')
         ax.set_zlabel('Z (m)')
         ax.set_title('UAV 3D Trajectories')
         ax.legend()
         
-        # 保存图形
+        # Save the figure
         plt.savefig(os.path.join(self.output_dir, 'uav_trajectories.png'), dpi=300, bbox_inches='tight')
         plt.close(fig)
     
     def _generate_frame(self, time_idx, time_points, position_cache, metrics_cache):
         """
-        生成单个可视化帧的辅助方法
+        Generate single visualization frame helper method
         """
         current_time = time_points[time_idx]
-        idx = time_idx  # 保持索引为文件命名
+        idx = time_idx  # Keep index as file naming
         
-        # 获取当前时间点的度量数据
+        # Get current time point metric data
         metrics_data = metrics_cache[current_time]
         sent_packets = metrics_data['sent_packets']
         received_packets = metrics_data['received_packets']
         total_collisions = metrics_data['total_collisions']
         
-        # 计算PDR
+        # Calculate PDR
         if sent_packets > 0:
             pdr = received_packets / sent_packets * 100
         else:
             pdr = 0
             
-        # 存储PDR历史数据
+        # Store PDR history data
         if time_idx > 0:
             self.pdr_history.append(pdr)
             self.time_history.append(current_time)
 
-        # 创建图形对象
+        # Create graphics object
         fig = plt.figure(figsize=(15, 12))
         
-        # 设置子图布局
+        # Set subplot layout
         gs = fig.add_gridspec(3, 4)
         ax = fig.add_subplot(gs[:, :3], projection='3d')
         info_ax = fig.add_subplot(gs[0, 3])
         stats_ax = fig.add_subplot(gs[1, 3])
         events_ax = fig.add_subplot(gs[2, 3])
         
-        # 获取当前帧中实际存在的无人机及其位置
+        # Get current frame actual existing drones and their positions
         active_drones = {}
         for i in range(self.simulator.n_drones):
             if i in position_cache[current_time]:
                 active_drones[i] = position_cache[current_time][i]
         
-        # 绘制无人机位置
+        # Draw drone positions
         for drone_id, position in active_drones.items():
             x, y, z = position
             color = self.colors[drone_id % len(self.colors)]
             
-            # 增大散点大小
-            ax.scatter(x, y, z, c=[color], s=150, alpha=1.0)  # 增大到150让无人机更明显
+            # Increase scatter size
+            ax.scatter(x, y, z, c=[color], s=150, alpha=1.0)  # Increase to 150 to make drones more obvious
             
-            # 增大无人机ID文本
+            # Increase drone ID text
             ax.text(x, y, z + 15, f"{drone_id}", color='black', fontsize=20,  
                     ha='center', va='center', weight='bold', 
                     bbox=dict(facecolor='white', alpha=0.8, pad=3, edgecolor='black'))
         
-        # 创建通信组字典，用于分组并错开同类型通信
+        # Create communication group dictionary for grouping and offsetting same type communication
         comm_groups = {packet_type: {} for packet_type in self.comm_colors.keys()}
         
-        # 首先分组所有通信，以便更好地错开它们
-        time_window = 0.10  # 保持100ms时间窗口
+        # First group all communications to better offset them
+        time_window = 0.10  # Keep 100ms time window
         for src_id, dst_id, packet_id, packet_type, event_time in self.comm_events:
             if abs(event_time - current_time) <= time_window:
                 if src_id in active_drones and dst_id in active_drones:
-                    # 使用src-dst对作为键
+                    # Use src-dst pair as key
                     pair_key = (min(src_id, dst_id), max(src_id, dst_id))
                     if pair_key not in comm_groups[packet_type]:
                         comm_groups[packet_type][pair_key] = []
                     comm_groups[packet_type][pair_key].append((src_id, dst_id, packet_id))
         
-        # 现在为每个通信类型按组绘制
+        # Now draw each communication type by group
         for packet_type, groups in comm_groups.items():
             color = self.comm_colors[packet_type]
             linewidth = 2.5 if packet_type == "DATA" else 2.0
@@ -245,56 +245,56 @@ class SimulationVisualizer:
             style = '-' if packet_type == "DATA" else '--' if packet_type == "ACK" else ':'
             
             for pair_key, comms in groups.items():
-                # 对于每对无人机，计算每个通信包应该有多大的偏移
+                # For each pair of drones, calculate each communication packet should have how much offset
                 for idx, (src_id, dst_id, packet_id) in enumerate(comms):
                     src_pos = active_drones[src_id]
                     dst_pos = active_drones[dst_id]
                     
-                    # 计算不同通信包类型之间的垂直偏移
+                    # Calculate vertical offset between different communication packet types
                     packet_type_offset = 0
                     if packet_type == "DATA":
                         packet_type_offset = 0
                     elif packet_type == "ACK":
-                        packet_type_offset = 12  # ACK在DATA上方
+                        packet_type_offset = 12  # ACK above DATA
                     elif packet_type == "HELLO":
-                        packet_type_offset = -12  # HELLO在DATA下方
+                        packet_type_offset = -12  # HELLO below DATA
                     
-                    # 对同类型通信进行进一步错开
-                    offset_multiplier = idx % 3 - 1  # -1, 0, 1 循环
+                    # Further offset same type communications
+                    offset_multiplier = idx % 3 - 1  # -1, 0, 1 loop
                     
-                    # 计算垂直偏移向量
+                    # Calculate vertical offset vector
                     dx = dst_pos[0] - src_pos[0]
                     dy = dst_pos[1] - src_pos[1]
                     dz = dst_pos[2] - src_pos[2]
                     
-                    # 创建一个垂直于xy平面的偏移
+                    # Create a normal vector perpendicular to xy plane
                     normal_x = -dy
                     normal_y = dx
                     normal_z = 0
                     
-                    # 归一化并缩放
+                    # Normalize and scale
                     normal_length = np.sqrt(normal_x**2 + normal_y**2)
                     if normal_length > 0:
                         normal_x = normal_x / normal_length
                         normal_y = normal_y / normal_length
                     
-                    # 应用基本类型偏移和同类型偏移
-                    base_offset = 8  # 基本偏移距离
+                    # Apply basic type offset and same type offset
+                    base_offset = 8  # Basic offset distance
                     offset_x = normal_x * (packet_type_offset + offset_multiplier * base_offset)
                     offset_y = normal_y * (packet_type_offset + offset_multiplier * base_offset)
-                    offset_z = packet_type_offset + offset_multiplier * 5  # z方向也有偏移
+                    offset_z = packet_type_offset + offset_multiplier * 5  # z direction also has offset
                     
-                    # 应用偏移
+                    # Apply offset
                     src_pos_offset = [src_pos[0] + offset_x, src_pos[1] + offset_y, src_pos[2] + offset_z]
                     dst_pos_offset = [dst_pos[0] + offset_x, dst_pos[1] + offset_y, dst_pos[2] + offset_z]
                     
-                    # 绘制通信线
+                    # Draw communication line
                     ax.plot([src_pos_offset[0], dst_pos_offset[0]], 
                             [src_pos_offset[1], dst_pos_offset[1]], 
                             [src_pos_offset[2], dst_pos_offset[2]], 
                             linestyle=style, color=color, linewidth=linewidth, alpha=alpha)
                     
-                    # 箭头位置
+                    # Arrow position
                     arrow_pos = [(src_pos_offset[0] + dst_pos_offset[0])/2, 
                             (src_pos_offset[1] + dst_pos_offset[1])/2, 
                             (src_pos_offset[2] + dst_pos_offset[2])/2]
@@ -302,7 +302,7 @@ class SimulationVisualizer:
                                     dst_pos_offset[1] - src_pos_offset[1], 
                                     dst_pos_offset[2] - src_pos_offset[2]]
                     
-                    # 标准化箭头方向
+                    # Normalize arrow direction
                     length = np.sqrt(sum([d**2 for d in arrow_direction]))
                     if length > 0:
                         arrow_direction = [d/length * 20 for d in arrow_direction]
@@ -310,22 +310,22 @@ class SimulationVisualizer:
                                 arrow_direction[0], arrow_direction[1], arrow_direction[2], 
                                 color=color, arrow_length_ratio=0.4, linewidth=linewidth)
                     
-                    # 仅为DATA包添加标签，位置更精确
+                    # Only add label for DATA packets, more accurate location
                     if packet_type == "DATA" and packet_id < 10000:
-                        # 在线的1/3处放置标签，远离无人机
+                        # Place label at 1/3 of online, away from drone
                         label_pos = [
                             src_pos_offset[0] + (dst_pos_offset[0] - src_pos_offset[0]) * 0.33,
                             src_pos_offset[1] + (dst_pos_offset[1] - src_pos_offset[1]) * 0.33,
                             src_pos_offset[2] + (dst_pos_offset[2] - src_pos_offset[2]) * 0.33 + 5
                         ]
                         
-                        # 使用不透明背景确保标签清晰可见
+                        # Use opaque background to ensure label is clear
                         ax.text(label_pos[0], label_pos[1], label_pos[2], 
                             f"Pkt:{packet_id}", color='black', fontsize=14,
                             bbox=dict(facecolor='white', alpha=0.9, pad=2, edgecolor=color),
-                            ha='center', va='center', zorder=100)  # 设置高zorder确保在最上层
+                            ha='center', va='center', zorder=100)  # Set high zorder to be on top
         
-        # 从comm_groups构建active_comms以便处理路由
+        # Build active_comms from comm_groups for routing processing
         active_comms = {
             "DATA": [],
             "ACK": [],
@@ -336,33 +336,33 @@ class SimulationVisualizer:
                 for src_id, dst_id, packet_id in comms:
                     active_comms[packet_type].append((src_id, dst_id, packet_id))
         
-        # 构建活跃的端到端路径
+        # Build active end-to-end paths
         active_routes = {}
         for packet_type, comms in active_comms.items():
             if packet_type == "DATA":
                 for src_id, dst_id, packet_id in comms:
-                    if packet_id < 10000:  # 只跟踪用户数据包
+                    if packet_id < 10000:  # Only track user data packets
                         if packet_id not in active_routes:
                             active_routes[packet_id] = []
                         active_routes[packet_id].append((src_id, dst_id))
         
-        # 绘制路由路径
+        # Draw route paths
         drawn_routes = set()
         for packet_id, hops in active_routes.items():
-            if len(hops) > 1:  # 多跳路径
-                # 按源节点组织跳数
+            if len(hops) > 1:  # Multi-hop path
+                # Organize hops by source node
                 route_segments = {}
                 for src, dst in hops:
                     route_segments[src] = dst
                 
-                # 尝试构建完整路径
+                # Try to build complete path
                 try:
-                    # 假设第一跳的源是路径起点
+                    # Assume first hop source is path start
                     start_node = hops[0][0]
                     path = [start_node]
                     current = start_node
                     
-                    # 最多尝试n_drones次跳数（避免潜在的循环）
+                    # Try up to n_drones times hops (avoid potential loop)
                     for _ in range(self.simulator.n_drones):
                         if current in route_segments:
                             next_node = route_segments[current]
@@ -371,68 +371,68 @@ class SimulationVisualizer:
                         else:
                             break
                     
-                    # 绘制完整路径，如果至少有3个节点
+                    # Draw complete path, if at least 3 nodes
                     if len(path) >= 3:
                         route_key = tuple(path)
                         if route_key not in drawn_routes:
                             positions = [active_drones[node] for node in path]
                             xs, ys, zs = zip(*positions)
                             
-                            # 绘制背景路径线
+                            # Draw background path line
                             ax.plot(xs, ys, zs, 'y-', linewidth=4, alpha=0.3)
                             
-                            # 完全改变路径标签位置 - 单独放置在图表侧面
-                            # 而不是放在UAV或线路上
+                            # Completely change path label position - place separately on chart side
+                            # Instead of placing on UAV or line
                             route_label = f"Route: {path[0]}→{path[-1]}"
                             
-                            # 直接在终点位置上方显示路由标签
+                            # Directly display route label above end point
                             end_point = positions[-1]
                             ax.text(end_point[0], end_point[1], end_point[2] + 30, 
                                 route_label, color='purple', fontsize=14,
                                 bbox=dict(facecolor='yellow', alpha=0.9, pad=3, edgecolor='black'),
-                                ha='center', va='center', weight='bold', zorder=101)  # 高zorder确保始终可见
+                                ha='center', va='center', weight='bold', zorder=101)  # High zorder to be always visible
                             
                             drawn_routes.add(route_key)
                 except Exception as e:
-                    # 如果路径构建失败，跳过
+                    # If path building fails, skip
                     pass
         
-        # 只包含实际可见的通信类型在图例中
+        # Only include actual visible communication types in legend
         legend_elements = []
         for packet_type, color in self.comm_colors.items():
-            # 只有在当前帧中有这种类型的通信时才添加到图例
+            # Only add to legend if there is this type of communication in current frame
             if packet_type in comm_groups and comm_groups[packet_type]:
                 style = '-' if packet_type == "DATA" else '--' if packet_type == "ACK" else ':'
                 legend_elements.append(Line2D([0], [0], color=color, linestyle=style, 
                                             label=f'{packet_type} Packets'))
         
-        # 只有在当前帧有多跳路径时才添加该图例
+        # Only add this legend if there is multi-hop path in current frame
         if drawn_routes:
             legend_elements.append(Line2D([0], [0], color='yellow', linewidth=4, alpha=0.3,
                                         label='Multi-hop Route'))
         
-        # 添加图例，增大字号
+        # Add legend, increase font size
         if legend_elements:
             ax.legend(handles=legend_elements, loc='upper right', fontsize=12)
         
-        # 设置图形标题和轴标签
-        ax.set_title(f'UAV Network Simulation at t={current_time:.2f}s')
+        # Set chart title and axis labels
+        ax.set_title(f'UAV Network Simulation at t={int(current_time*1000000)}μs')  # Convert seconds to microseconds
         ax.set_xlabel('X (m)')
         ax.set_ylabel('Y (m)')
         ax.set_zlabel('Z (m)')
         
-        # 设置坐标轴范围
+        # Set axis range
         ax.set_xlim(0, config.MAP_LENGTH)
         ax.set_ylim(0, config.MAP_WIDTH)
         ax.set_zlim(0, config.MAP_HEIGHT)
         
-        # 添加网格
+        # Add grid
         ax.grid(True)
         
-        # 更新信息面板 - 强调是当前帧的值
+        # Update information panel - emphasize current frame value
         info_ax.axis('off')
         info_text = (
-            f"Simulation Time: {current_time:.2f}s\n\n"
+            f"Simulation Time: {int(current_time*1000000)}μs\n\n"  # Convert seconds to microseconds
             f"Sent Packets: {sent_packets}\n"
             f"Received Packets: {received_packets}\n"
             f"Packet Delivery Ratio: {pdr:.2f}%\n"
@@ -441,51 +441,51 @@ class SimulationVisualizer:
         info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
                     fontsize=12, verticalalignment='top')
         
-        # 绘制PDR折线图替代柱状图
+        # Draw PDR line chart instead of bar chart
         stats_ax.clear()
         
-        # 如果有足够的历史数据，绘制折线图
+        # If there is enough history data, draw line chart
         if len(self.time_history) > 1:
-            # 绘制PDR历史折线
+            # Draw PDR history line
             stats_ax.plot(self.time_history, self.pdr_history, 'g-', linewidth=2)
             
-            # 标记当前点
+            # Mark current point
             stats_ax.plot(current_time, pdr, 'ro', markersize=8)
             
-            # 添加网格线和标签
+            # Add grid lines and labels
             stats_ax.grid(True, linestyle='--', alpha=0.7)
             stats_ax.set_xlabel('Time (s)')
             stats_ax.set_ylabel('PDR (%)')
             stats_ax.set_title('Packet Delivery Ratio')
             
-            # 设置y轴范围
-            stats_ax.set_ylim(0, 105)  # 给PDR留出一点空间
+            # Set y axis range
+            stats_ax.set_ylim(0, 105)  # Give PDR some space
         else:
-            # 如果没有足够的历史数据，绘制单个点
+            # If there is not enough history data, draw single point
             stats_ax.bar(['PDR'], [pdr], color='g')
             stats_ax.set_ylabel('PDR (%)')
             stats_ax.set_ylim(0, 105)
         
-        # 显示事件
+        # Display events
         events_ax.axis('off')
         events_ax.set_title('Simulation Status')
         events_ax.text(0.05, 0.95, f"Frame {idx+1}/{len(time_points)}", 
                     transform=events_ax.transAxes, fontsize=10, verticalalignment='top')
         
-        # 确保布局一致
+        # Ensure consistent layout
         plt.tight_layout()
         
-        # 保存为固定尺寸，确保所有图像大小一致
+        # Save as fixed size, ensure all images consistent size
         output_path = os.path.join(self.output_dir, 'frames', f'frame_{idx:04d}.png')
-        plt.savefig(output_path, dpi=100, bbox_inches=None)  # 不使用tight以保证固定大小
+        plt.savefig(output_path, dpi=100, bbox_inches=None)  # Do not use tight to ensure fixed size
         plt.close(fig)
-        
-    def save_frame_visualization(self, interval=0.1):
+    
+    def save_frame_visualization(self, interval=0.02):
         """
-        保存帧可视化（定期快照）
+        Save frame visualization (periodic snapshot)
         
-        参数:
-            interval: 帧间隔（秒）
+        Parameters:
+            interval: Frame interval (seconds)
         """
         if not self.timestamps:
             print("No timestamps available")
@@ -495,14 +495,14 @@ class SimulationVisualizer:
         min_time = min(self.timestamps)
         print(f"Time range: {min_time:.2f}s to {max_time:.2f}s")
         
-        # 使用等间隔的时间点，确保覆盖整个时间范围
+        # Use evenly spaced time points to ensure cover entire time range
         time_points = np.arange(min_time, max_time + interval, interval)
         
-        # 创建frames目录（如果不存在）
+        # Create frames directory (if not exist)
         frames_dir = os.path.join(self.output_dir, 'frames')
         os.makedirs(frames_dir, exist_ok=True)
         
-        # 先清空frames目录中的所有旧帧
+        # First clear all old frames in frames directory
         for old_frame in os.listdir(frames_dir):
             if old_frame.endswith('.png'):
                 os.remove(os.path.join(frames_dir, old_frame))
@@ -510,105 +510,105 @@ class SimulationVisualizer:
         total_frames = len(time_points)
         print(f"Starting frame generation: {total_frames} frames to create")
         
-        # 获取准确的控制台输出指标
+        # Get accurate console output metrics
         console_metrics = self.parse_console_output()
         print(f"Parsed console metrics: {console_metrics}")
         
-        # 使用控制台指标而不是计算值
-        final_sent = console_metrics.get('sent_packets', 63)  # 从控制台获取
-        final_received = int(final_sent * console_metrics.get('pdr', 33.33) / 100)  # 计算实际接收数
-        final_pdr = console_metrics.get('pdr', 33.33)  # 从控制台获取 
-        final_collisions = console_metrics.get('collisions', 84)  # 从控制台获取
+        # Use console metrics instead of calculated values
+        final_sent = console_metrics.get('sent_packets', -1)  # Get from console
+        final_received = int(final_sent * console_metrics.get('pdr', 0) / 100)  # Calculate actual received number
+        final_pdr = console_metrics.get('pdr', 0)  # Get from console 
+        final_collisions = console_metrics.get('collisions', -1)  # Get from console
         
         print(f"Using console metrics - Sent: {final_sent}, Received: {final_received}, "
               f"PDR: {final_pdr}%, Collisions: {final_collisions}")
         
-        # 创建合成数据以匹配控制台输出
+        # Create synthetic data to match console output
         sent_by_time = []
         received_by_time = []
         pdr_by_time = []
         collisions_by_time = []
         
-        # 为每个时间点生成逐渐增长的指标，确保最终值与控制台输出匹配
+        # Generate gradually increasing metrics for each time point, ensure final value matches console output
         for t in time_points:
             ratio = (t - min_time) / (max_time - min_time) if max_time > min_time else 1.0
             
-            # 发送的包线性增长
+            # Linear growth of sent packets
             sent = min(int(final_sent * ratio), final_sent)
             sent_by_time.append(sent)
             
-            # 接收的包线性增长，与PDR保持一致
+            # Linear growth of received packets, consistent with PDR
             received = min(int(final_received * ratio), final_received)
             received_by_time.append(received)
             
-            # PDR - 确保匹配控制台输出
+            # PDR - Ensure matches console output
             if sent > 0:
                 current_pdr = (received / sent) * 100
             else:
                 current_pdr = 0
             pdr_by_time.append(current_pdr)
             
-            # 碰撞线性增长
+            # Linear growth of collisions
             collisions = min(int(final_collisions * ratio), final_collisions)
             collisions_by_time.append(collisions)
         
-        # 创建帧
+        # Create frames
         frames = []
         successful_frames = 0
         
         for time_idx, current_time in enumerate(time_points):
             frame_path = os.path.join(frames_dir, f'frame_{time_idx:04d}.png')
             
-            # 创建图形 - 使用更大的尺寸
+            # Create graphics - Use larger size
             fig = plt.figure(figsize=(14, 10))
             
-            # 调整布局 - 让3D图占据左侧大部分空间
+            # Adjust layout - Let 3D chart occupy leftmost 2/3 space
             gs = fig.add_gridspec(3, 3)
-            ax = fig.add_subplot(gs[:, 0:2], projection='3d')  # 3D图占据左侧2/3空间
+            ax = fig.add_subplot(gs[:, 0:2], projection='3d')  # 3D chart occupies left 2/3 space
             
-            # 右侧放置信息和图表
-            info_ax = fig.add_subplot(gs[0, 2])  # 信息面板
-            pdr_ax = fig.add_subplot(gs[1, 2])   # PDR图表
-            collision_ax = fig.add_subplot(gs[2, 2])  # 碰撞图表
+            # Right side place information and chart
+            info_ax = fig.add_subplot(gs[0, 2])  # Information panel
+            pdr_ax = fig.add_subplot(gs[1, 2])   # PDR chart
+            collision_ax = fig.add_subplot(gs[2, 2])  # Collision chart
             
-            # 设置标题
-            ax.set_title(f'UAV Network Simulation at t={current_time:.2f}s')
+            # Set title
+            ax.set_title(f'UAV Network Simulation at t={int(current_time*1000000)}μs')
             
-            # 获取当前帧的无人机位置
+            # Get current frame drone positions
             drone_positions = {}
             
-            # 检查我们使用的数据结构类型
+            # Check we use data structure type
             for drone_id in range(len(self.drone_positions)):
                 trajectory = self.drone_positions[drone_id]
                 
                 if isinstance(trajectory, dict):
-                    # 字典类型 {timestamp: position}
+                    # Dictionary type {timestamp: position}
                     closest_time = self._find_closest_time(trajectory, current_time)
                     if closest_time:
                         drone_positions[drone_id] = trajectory[closest_time]
                 
                 elif isinstance(trajectory, list):
-                    # 列表类型 [position]
+                    # List type [position]
                     frame_idx = self._find_closest_time(trajectory, current_time)
                     if frame_idx is not None and 0 <= frame_idx < len(trajectory):
                         drone_positions[drone_id] = trajectory[frame_idx]
             
-            # 筛选出当前时间点之前的有效无人机
+            # Filter out valid drones before current time point
             active_drones = {}
             for drone_id, position in drone_positions.items():
                 if position is not None:
                     active_drones[drone_id] = position
             
-            # 绘制无人机
+            # Draw drones
             for drone_id, position in active_drones.items():
                 ax.scatter(position[0], position[1], position[2], color='red', s=100, marker='o')
                 
-                # 为每个无人机添加标签
+                # Add label for each drone
                 ax.text(position[0], position[1], position[2] + 30, 
                        str(drone_id), color='black', fontsize=12, 
                        ha='center', va='center', bbox=dict(facecolor='white', alpha=0.7))
             
-            # 找出当前时间窗口内的通信事件
+            # Find communication events in current time window
             current_comm_events = []
             
             for event in self.comm_events:
@@ -617,19 +617,19 @@ class SimulationVisualizer:
                 
                 src_id, dst_id, packet_id, packet_type, event_time = event
                 
-                # 仅包括当前时间窗口内发生的事件
-                time_window = 0.3  # 显示过去0.3秒内的通信事件
+                # Include only events that occurred in current time window
+                time_window = 0.3  # Display communication events in past 0.3 seconds
                 if current_time - time_window <= event_time <= current_time:
                     current_comm_events.append((src_id, dst_id, packet_id, packet_type, event_time))
             
-            # 绘制通信事件
+            # Draw communication events
             packet_labels = {}
             for src_id, dst_id, packet_id, packet_type, event_time in current_comm_events:
                 if src_id in active_drones and dst_id in active_drones:
                     src_pos = active_drones[src_id]
                     dst_pos = active_drones[dst_id]
                     
-                    # 绘制从源到目的地的箭头
+                    # Draw arrow from source to destination
                     if packet_type == "DATA":
                         arrow = Arrow3D([src_pos[0], dst_pos[0]],
                                        [src_pos[1], dst_pos[1]],
@@ -638,12 +638,12 @@ class SimulationVisualizer:
                                        lw=2, arrowstyle="-|>", color="b")
                         ax.add_artist(arrow)
                         
-                        # 记录当前正在发送的包
+                        # Record current packet being sent
                         mid_x = (src_pos[0] + dst_pos[0]) / 2
                         mid_y = (src_pos[1] + dst_pos[1]) / 2
                         mid_z = (src_pos[2] + dst_pos[2]) / 2
                         
-                        # 确保标签不重叠
+                        # Ensure labels do not overlap
                         offset = 15 * (len(packet_labels) % 3 + 1)
                         packet_labels[packet_id] = (mid_x, mid_y, mid_z + offset)
                     elif packet_type == "ACK":
@@ -654,12 +654,12 @@ class SimulationVisualizer:
                                        lw=2, arrowstyle="-|>", color="g", linestyle='dashed')
                         ax.add_artist(arrow)
             
-            # 为最近发送的数据包添加标签
+            # Add label for recently sent packets
             for packet_id, (x, y, z) in packet_labels.items():
                 ax.text(x, y, z, f"Pkt:{packet_id}", color='blue', fontsize=10,
                        ha='center', va='center', bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
             
-            # 设置坐标轴范围
+            # Set axis range
             config = getattr(self, 'config', None)
             map_length = getattr(config, 'MAP_LENGTH', 600) if config else 600
             map_width = getattr(config, 'MAP_WIDTH', 600) if config else 600
@@ -669,25 +669,25 @@ class SimulationVisualizer:
             ax.set_ylim(0, map_width)
             ax.set_zlim(0, map_height)
             
-            # 设置轴标签
+            # Set axis labels
             ax.set_xlabel('X (m)')
             ax.set_ylabel('Y (m)')
             ax.set_zlabel('Z (m)')
             
-            # 添加网格
+            # Add grid
             ax.grid(True)
             
-            # 添加图例
+            # Add legend
             legend_elements = [
                 Line2D([0], [0], color='b', lw=2, label='DATA Packets'),
                 Line2D([0], [0], color='g', lw=2, linestyle='--', label='ACK Packets')
             ]
             ax.legend(handles=legend_elements, loc='upper right')
             
-            # 显示仿真信息 - 使用控制台输出的指标
+            # Display simulation information - Use console output metrics
             info_ax.axis('off')
             info_text = (
-                f"Simulation Time: {current_time:.2f}s\n\n"
+                f"Simulation Time: {int(current_time*1000000)}μs\n\n"  # Convert seconds to microseconds
                 f"Sent Packets: {sent_by_time[time_idx]}\n"
                 f"Received Packets: {received_by_time[time_idx]}\n"
                 f"Packet Delivery Ratio: {pdr_by_time[time_idx]:.2f}%\n"
@@ -696,62 +696,62 @@ class SimulationVisualizer:
             info_ax.text(0.05, 0.95, info_text, transform=info_ax.transAxes, 
                         fontsize=12, verticalalignment='top')
             
-            # 绘制PDR历史图表
+            # Draw PDR history chart
             if len(time_points) > 1:
-                # 绘制历史曲线
+                # Draw history curve
                 pdr_ax.plot(time_points[:time_idx+1], pdr_by_time[:time_idx+1], 'g-', linewidth=2)
                 
-                # 标记当前点
+                # Mark current point
                 pdr_ax.plot(current_time, pdr_by_time[time_idx], 'ro', markersize=8)
                 
-                # 美化图表
+                # Improve chart
                 pdr_ax.grid(True, linestyle='--', alpha=0.7)
                 pdr_ax.set_xlabel('Time (s)')
                 pdr_ax.set_ylabel('PDR (%)')
                 pdr_ax.set_title('Packet Delivery Ratio')
                 
-                # 设置y轴范围，确保显示整个PDR范围
+                # Set y axis range, ensure entire PDR range is displayed
                 pdr_ax.set_ylim(0, 105)
                 
-                # 设置x轴范围为整个时间段
+                # Set x axis range entire time period
                 pdr_ax.set_xlim(min_time, max_time)
             
-            # 绘制碰撞历史图表
+            # Draw collision history chart
             if len(time_points) > 1:
-                # 绘制碰撞历史曲线
+                # Draw collision history curve
                 collision_ax.plot(time_points[:time_idx+1], 
                                 collisions_by_time[:time_idx+1], 'r-', linewidth=2)
                 
-                # 标记当前点
+                # Mark current point
                 collision_ax.plot(current_time, collisions_by_time[time_idx], 'bo', markersize=8)
                 
-                # 美化图表
+                # Improve chart
                 collision_ax.grid(True, linestyle='--', alpha=0.7)
                 collision_ax.set_xlabel('Time (s)')
                 collision_ax.set_ylabel('Collisions')
                 collision_ax.set_title('Cumulative Collisions')
                 
-                # 确保Y轴上限能容纳最终的碰撞总数
+                # Ensure Y axis upper limit can accommodate final collision total
                 max_collisions = max(collisions_by_time)
-                collision_ax.set_ylim(0, max_collisions * 1.1 or 1)  # 如果为0则设为1
+                collision_ax.set_ylim(0, max_collisions * 1.1 or 1)  # If 0 then set to 1
                 
-                # 设置x轴范围为整个时间段
+                # Set x axis range entire time period
                 collision_ax.set_xlim(min_time, max_time)
             
-            # 显示帧数信息
+            # Display frame number information
             fig.suptitle(f"Frame {time_idx+1}/{total_frames}", fontsize=10, y=0.01)
             
-            # 确保布局紧凑
+            # Ensure compact layout
             plt.tight_layout()
             
-            # 保存帧
+            # Save frame
             plt.savefig(frame_path, dpi=100)
             plt.close(fig)
             
             frames.append(frame_path)
             successful_frames += 1
             
-            # 每生成10个帧输出一次进度
+            # Output progress every 10 frames
             if (time_idx + 1) % 10 == 0 or time_idx == len(time_points) - 1:
                 print(f"Generated {successful_frames}/{time_idx+1} frames")
         
@@ -877,14 +877,14 @@ class SimulationVisualizer:
         return metrics
     
     def create_animations(self):
-        """创建动画，从帧可视化快照创建GIF动画"""
-        # 查找所有帧文件
+        """Create animation, create GIF animation from frame visualization snapshot"""
+        # Find all frame files
         frames_dir = os.path.join(self.output_dir, 'frames')
         if not os.path.exists(frames_dir):
             print("No frames directory found. Run save_frame_visualization first.")
             return
         
-        # 获取所有PNG帧，并按编号排序
+        # Get all PNG frames, and sort by number
         frame_files = [f for f in os.listdir(frames_dir) if f.endswith('.png') and f.startswith('frame_')]
         print(f"Found {len(frame_files)} frame files in {frames_dir}")
         
@@ -892,7 +892,7 @@ class SimulationVisualizer:
             print("No frame files found")
             return
         
-        # 按帧编号排序
+        # Sort frames by number
         frames = sorted([
             os.path.join(frames_dir, f) for f in frame_files
         ], key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
@@ -901,38 +901,31 @@ class SimulationVisualizer:
             print(f"Creating animation from {len(frames)} frames...")
             gif_path = os.path.join(self.output_dir, 'uav_simulation.gif')
             
-            # 使用PIL创建GIF
-            # 读取第一帧以获取大小
+            # Use PIL to create GIF
+            # Read first frame to get size
             first_img = Image.open(frames[0])
             standard_size = first_img.size
             
-            # 加载所有帧
+            # Load all frames
             images = []
             for i, frame_path in enumerate(frames):
                 img = Image.open(frame_path)
-                # 确保所有帧大小一致
+                # Ensure all frames consistent size
                 if img.size != standard_size:
                     img = img.resize(standard_size, Image.LANCZOS)
                 images.append(img)
                 
-                # 每100帧显示一次进度
+                # Output progress every 100 frames
                 if (i+1) % 100 == 0 or i == len(frames) - 1:
                     print(f"Loaded {i+1}/{len(frames)} frames")
             
             if images:
-                # 调整帧率，根据帧数
-                if len(images) > 200:
-                    fps = 20
-                elif len(images) > 100:
-                    fps = 15
-                elif len(images) > 50:
-                    fps = 10
-                else:
-                    fps = 5
+                # Adjust frame rate, based on frame count
+                fps = 10
                     
                 print(f"Saving GIF with {len(images)} frames at {fps} fps...")
                 
-                # 保存GIF
+                # Save GIF
                 images[0].save(
                     gif_path, 
                     save_all=True, 
@@ -948,42 +941,42 @@ class SimulationVisualizer:
     
     def run_visualization(self, tracking_interval=0.5, save_interval=1.0):
         """
-        运行可视化过程
+        Run visualization process
         
-        参数:
-            tracking_interval: 跟踪位置的时间间隔（秒）
-            save_interval: 保存可视化结果的时间间隔（秒）
+        Parameters:
+            tracking_interval: Tracking position time interval (seconds)
+            save_interval: Save visualization results time interval (seconds)
         """
-        # 转换为微秒
+        # Convert to microseconds
         tracking_interval_us = tracking_interval * 1e6
         save_interval_us = save_interval * 1e6
         
-        # 启动位置跟踪进程
+        # Start position tracking process
         def track_process():
             while True:
                 self.track_drone_positions()
                 yield self.simulator.env.timeout(tracking_interval_us)
         
-        # 启动定期保存进程
+        # Start periodic save process
         def save_process():
             while True:
                 yield self.simulator.env.timeout(save_interval_us)
-                # 什么也不做，仅在最后保存
+                # Do nothing, only save at the end
         
-        # 注册进程
+        # Register process
         self.simulator.env.process(track_process())
         self.simulator.env.process(save_process())
     
     def finalize(self):
         """
-        完成可视化处理并生成最终输出
+        Complete visualization processing and generate final output
         """
         print("Saving visualization results...")
         
-        # 保存帧可视化并获取帧列表
-        frames = self.save_frame_visualization(interval=0.1)  # 使用0.1秒的间隔
+        # Save frame visualization and get frame list
+        frames = self.save_frame_visualization(interval=0.02)  # Use 0.02 seconds (20 milliseconds) interval, improve time granularity
         
-        # 创建动画
+        # Create animation
         if frames:
             self.create_animations()
         else:
@@ -993,72 +986,72 @@ class SimulationVisualizer:
 
     def _find_closest_time(self, trajectory, target_time):
         """
-        查找轨迹中最接近给定时间点的时间戳或索引
+        Find closest time stamp or index in trajectory to given time point
         
-        参数:
-            trajectory: 轨迹数据，可以是字典 {timestamp: position} 或列表 [position]
-            target_time: 目标时间点
+        Parameters:
+            trajectory: Trajectory data, can be dictionary {timestamp: position} or list [position]
+            target_time: Target time point
             
-        返回:
-            如果轨迹是字典，返回最接近的时间戳
-            如果轨迹是列表，返回当前帧的索引 (按比例计算)
+        Returns:
+            If trajectory is dictionary, return closest timestamp
+            If trajectory is list, return current frame index (proportional calculation)
         """
         if not trajectory:
             return None
         
-        # 检查轨迹类型
+        # Check trajectory type
         if isinstance(trajectory, dict):
-            # 字典类型 {timestamp: position}
+            # Dictionary type {timestamp: position}
             timestamps = sorted(trajectory.keys())
             
-            # 如果目标时间小于第一个时间戳，返回第一个
+            # If target time is less than first timestamp, return first
             if target_time <= timestamps[0]:
                 return timestamps[0]
             
-            # 如果目标时间大于最后一个时间戳，返回最后一个
+            # If target time is greater than last timestamp, return last
             if target_time >= timestamps[-1]:
                 return timestamps[-1]
             
-            # 线性查找最接近的时间戳
+            # Linear search for closest timestamp
             for i in range(len(timestamps) - 1):
                 if timestamps[i] <= target_time <= timestamps[i + 1]:
-                    # 返回更接近的那个
+                    # Return the closer one
                     if target_time - timestamps[i] < timestamps[i + 1] - target_time:
                         return timestamps[i]
                     else:
                         return timestamps[i + 1]
                     
-            return timestamps[-1]  # 默认返回最后一个
+            return timestamps[-1]  # Default return last
         
         elif isinstance(trajectory, list):
-            # 列表类型 [position]
-            # 根据当前时间在时间范围内的比例，计算对应的索引
-            # 假设轨迹中的每个点对应一个均匀的时间点
+            # List type [position]
+            # Calculate target time corresponding proportion in time range
+            # Assume each point in trajectory corresponds to a uniform time point
             total_frames = len(trajectory)
             
             if total_frames == 0:
                 return None
             
-            # 获取时间范围
+            # Get time range
             min_time = min(self.timestamps) if self.timestamps else 0
             max_time = max(self.timestamps) if self.timestamps else 1
             time_range = max_time - min_time
             
             if time_range <= 0:
-                return 0  # 避免除以零错误
+                return 0  # Avoid division by zero error
             
-            # 计算目标时间对应的比例
+            # Calculate target time corresponding proportion
             time_ratio = (target_time - min_time) / time_range
             
-            # 将比例转换为索引
+            # Convert proportion to index
             frame_idx = int(time_ratio * (total_frames - 1))
             
-            # 确保索引在有效范围内
+            # Ensure index in valid range
             frame_idx = max(0, min(frame_idx, total_frames - 1))
             
             return frame_idx
         
         else:
-            # 不支持的类型
+            # Unsupported type
             print(f"Warning: Unsupported trajectory type: {type(trajectory)}")
             return None

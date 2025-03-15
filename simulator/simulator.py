@@ -75,25 +75,25 @@ class Simulator:
         self.metrics.print_metrics()
 
     def add_communication_tracking(self, visualizer):
-        """添加对通信事件的跟踪"""
+        """Add tracking for communication events"""
         self.visualizer = visualizer
         
-        # 保存原始的unicast_put方法
+        # Save the original unicast_put method
         original_unicast_put = self.channel.unicast_put
         
-        # 重写unicast_put方法以跟踪通信
+        # Rewrite unicast_put method to track communications
         def tracked_unicast_put(message, dst_drone_id):
-            # 调用原始方法
+            # Call the original method
             result = original_unicast_put(message, dst_drone_id)
             
-            # 记录通信事件
+            # Record communication event
             packet, _, src_drone_id, _ = message
             
-            # 添加包类型区分
+            # Add packet type differentiation
             packet_id = packet.packet_id
             packet_type = "DATA"
             
-            # 判断不同类型的packet
+            # Identify different types of packets
             if packet_id >= 20000:
                 packet_type = "ACK"
             elif packet_id >= 10000:
@@ -103,5 +103,5 @@ class Simulator:
             
             return result
         
-        # 替换方法
+        # Replace the method
         self.channel.unicast_put = tracked_unicast_put
