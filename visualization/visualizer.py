@@ -250,16 +250,7 @@ class SimulationVisualizer:
                     src_pos = active_drones[src_id]
                     dst_pos = active_drones[dst_id]
                     
-                    # Calculate vertical offset between different communication packet types
-                    packet_type_offset = 0
-                    if packet_type == "DATA":
-                        packet_type_offset = 0
-                    elif packet_type == "ACK":
-                        packet_type_offset = 12  # ACK above DATA
-                    elif packet_type == "HELLO":
-                        packet_type_offset = -12  # HELLO below DATA
-                    
-                    # Further offset same type communications
+                    # Set offset for same type communications only
                     offset_multiplier = idx % 3 - 1  # -1, 0, 1 loop
                     
                     # Calculate vertical offset vector
@@ -280,9 +271,9 @@ class SimulationVisualizer:
                     
                     # Apply basic type offset and same type offset
                     base_offset = 8  # Basic offset distance
-                    offset_x = normal_x * (packet_type_offset + offset_multiplier * base_offset)
-                    offset_y = normal_y * (packet_type_offset + offset_multiplier * base_offset)
-                    offset_z = packet_type_offset + offset_multiplier * 5  # z direction also has offset
+                    offset_x = normal_x * (offset_multiplier * base_offset)
+                    offset_y = normal_y * (offset_multiplier * base_offset)
+                    offset_z = offset_multiplier * 5  # z direction also has offset
                     
                     # Apply offset
                     src_pos_offset = [src_pos[0] + offset_x, src_pos[1] + offset_y, src_pos[2] + offset_z]
@@ -398,13 +389,11 @@ class SimulationVisualizer:
                     pass
         
         # Only include actual visible communication types in legend
-        legend_elements = []
-        for packet_type, color in self.comm_colors.items():
-            # Only add to legend if there is this type of communication in current frame
-            if packet_type in comm_groups and comm_groups[packet_type]:
-                style = '-' if packet_type == "DATA" else '--' if packet_type == "ACK" else ':'
-                legend_elements.append(Line2D([0], [0], color=color, linestyle=style, 
-                                            label=f'{packet_type} Packets'))
+        legend_elements = [
+            Line2D([0], [0], color='b', lw=2, marker='>', markersize=8, label='DATA Packets'),
+            Line2D([0], [0], color='g', lw=1, marker='v', markersize=8, label='ACK Packets (curved)'),
+            Line2D([0], [0], color='orange', lw=1, marker='o', markersize=6, label='HELLO Packets (broadcast)')
+        ]
         
         # Only add this legend if there is multi-hop path in current frame
         if drawn_routes:
@@ -635,7 +624,7 @@ class SimulationVisualizer:
                                        [src_pos[1], dst_pos[1]],
                                        [src_pos[2], dst_pos[2]],
                                        mutation_scale=20,
-                                       lw=2, arrowstyle="-|>", color="b")
+                                       lw=2, arrowstyle="-|>", color="b", alpha=1.0)  # Standard arrow style
                         ax.add_artist(arrow)
                         
                         # Record current packet being sent
@@ -647,12 +636,46 @@ class SimulationVisualizer:
                         offset = 15 * (len(packet_labels) % 3 + 1)
                         packet_labels[packet_id] = (mid_x, mid_y, mid_z + offset)
                     elif packet_type == "ACK":
-                        arrow = Arrow3D([dst_pos[0], src_pos[0]],
-                                       [dst_pos[1], src_pos[1]],
-                                       [dst_pos[2], src_pos[2]],
-                                       mutation_scale=20,
-                                       lw=2, arrowstyle="-|>", color="g", linestyle='dashed')
-                        ax.add_artist(arrow)
+                        # Create a curved path for ACK packets
+                        mid_x = (dst_pos[0] + src_pos[0]) / 2
+                        mid_y = (dst_pos[1] + src_pos[1]) / 2
+                        mid_z = (dst_pos[2] + src_pos[2]) / 2
+                        
+                        # Add offset perpendicular to the line
+                        vec = np.array([dst_pos[0] - src_pos[0], dst_pos[1] - src_pos[1], dst_pos[2] - src_pos[2]])
+                        perp = np.array([-vec[1], vec[0], 0])  # Perpendicular in the XY plane
+                        if np.linalg.norm(perp) != 0:
+                            perp = perp / np.linalg.norm(perp) * 0.15  # Normalize and scale
+                            mid_x += perp[0]
+                            mid_y += perp[1]
+                        
+                        # Use a valid arrow style
+                        curve = Arrow3D([dst_pos[0], mid_x, src_pos[0]],
+                                       [dst_pos[1], mid_y, src_pos[1]],
+                                       [dst_pos[2], mid_z, src_pos[2]],
+                                       mutation_scale=15,
+                                       lw=1, arrowstyle="wedge", color="g", alpha=0.7)  # Changed to wedge style
+                        ax.add_artist(curve)
+                    elif packet_type == "HELLO":
+                        # Create circular/broadcast style for HELLO packets
+                        for offset_factor in np.linspace(0, 1, 3):  # Create 3 slightly different paths
+                            mid_x = (dst_pos[0] + src_pos[0]) / 2
+                            mid_y = (dst_pos[1] + src_pos[1]) / 2
+                            mid_z = (dst_pos[2] + src_pos[2]) / 2
+                            
+                            # Add different offsets for each path
+                            offset = 0.2 * offset_factor
+                            if offset_factor > 0:  # Skip the first one (keep it straight)
+                                mid_x += offset * np.sin(offset_factor * np.pi)
+                                mid_y += offset * np.cos(offset_factor * np.pi)
+                            
+                            # Use a valid arrow style
+                            curve = Arrow3D([src_pos[0], mid_x, dst_pos[0]],
+                                           [src_pos[1], mid_y, dst_pos[1]],
+                                           [src_pos[2], mid_z, dst_pos[2]],
+                                           mutation_scale=10,
+                                           lw=1, arrowstyle="simple", color="orange", alpha=0.5 * (1 - 0.2 * offset_factor))
+                            ax.add_artist(curve)
             
             # Add label for recently sent packets
             for packet_id, (x, y, z) in packet_labels.items():
@@ -679,8 +702,9 @@ class SimulationVisualizer:
             
             # Add legend
             legend_elements = [
-                Line2D([0], [0], color='b', lw=2, label='DATA Packets'),
-                Line2D([0], [0], color='g', lw=2, linestyle='--', label='ACK Packets')
+                Line2D([0], [0], color='b', lw=2, marker='>', markersize=8, label='DATA Packets'),
+                Line2D([0], [0], color='g', lw=1, marker='v', markersize=8, label='ACK Packets (curved)'),
+                Line2D([0], [0], color='orange', lw=1, marker='o', markersize=6, label='HELLO Packets (broadcast)')
             ]
             ax.legend(handles=legend_elements, loc='upper right')
             
@@ -753,7 +777,7 @@ class SimulationVisualizer:
             
             # Output progress every 10 frames
             if (time_idx + 1) % 10 == 0 or time_idx == len(time_points) - 1:
-                print(f"Generated {successful_frames}/{time_idx+1} frames")
+                print(f"Generated {successful_frames}/{total_frames} frames")
         
         print(f"Successfully generated {successful_frames} frames out of {total_frames} time points")
         return frames
