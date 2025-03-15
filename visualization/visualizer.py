@@ -624,7 +624,7 @@ class SimulationVisualizer:
                                        [src_pos[1], dst_pos[1]],
                                        [src_pos[2], dst_pos[2]],
                                        mutation_scale=20,
-                                       lw=2, arrowstyle="-|>", color="b", alpha=1.0)  # Standard arrow style
+                                       lw=1, arrowstyle="-|>", color="b", alpha=1.0)  # Standard arrow style
                         ax.add_artist(arrow)
                         
                         # Record current packet being sent
@@ -654,7 +654,7 @@ class SimulationVisualizer:
                                        [dst_pos[1], mid_y, src_pos[1]],
                                        [dst_pos[2], mid_z, src_pos[2]],
                                        mutation_scale=15,
-                                       lw=1, arrowstyle="wedge", color="g", alpha=0.7)  # Changed to wedge style
+                                       lw=0.5, arrowstyle="wedge", color="g", alpha=0.7)  # Changed to wedge style
                         ax.add_artist(curve)
                     elif packet_type == "HELLO":
                         # Create circular/broadcast style for HELLO packets
@@ -674,7 +674,7 @@ class SimulationVisualizer:
                                            [src_pos[1], mid_y, dst_pos[1]],
                                            [src_pos[2], mid_z, dst_pos[2]],
                                            mutation_scale=10,
-                                           lw=1, arrowstyle="simple", color="orange", alpha=0.5 * (1 - 0.2 * offset_factor))
+                                           lw=0.3, arrowstyle="simple", color="orange", alpha=0.5 * (1 - 0.2 * offset_factor))
                             ax.add_artist(curve)
             
             # Add label for recently sent packets
@@ -702,9 +702,9 @@ class SimulationVisualizer:
             
             # Add legend
             legend_elements = [
-                Line2D([0], [0], color='b', lw=2, marker='>', markersize=8, label='DATA Packets'),
-                Line2D([0], [0], color='g', lw=1, marker='v', markersize=8, label='ACK Packets (curved)'),
-                Line2D([0], [0], color='orange', lw=1, marker='o', markersize=6, label='HELLO Packets (broadcast)')
+                Line2D([0], [0], color='b', lw=1, marker='>', markersize=8, label='DATA Packets'),
+                Line2D([0], [0], color='g', lw=0.5, marker='v', markersize=8, label='ACK Packets (curved)'),
+                Line2D([0], [0], color='orange', lw=0.3, marker='o', markersize=6, label='HELLO Packets (broadcast)')
             ]
             ax.legend(handles=legend_elements, loc='upper right')
             
@@ -998,7 +998,7 @@ class SimulationVisualizer:
         print("Saving visualization results...")
         
         # Save frame visualization and get frame list
-        frames = self.save_frame_visualization(interval=0.02)  # Use 0.02 seconds (20 milliseconds) interval, improve time granularity
+        frames = self.save_frame_visualization(interval=0.05)  # Use 0.05 seconds (50 milliseconds) interval, improve time granularity
         
         # Create animation
         if frames:
