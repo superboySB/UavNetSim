@@ -7,6 +7,7 @@ from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
 from matplotlib.widgets import Slider, Button, TextBox
 import io
+import matplotlib.patheffects as path_effects
 
 # Add 3D arrow class definition that handles arrows in 3D view
 class Arrow3D(FancyArrowPatch):
@@ -481,20 +482,24 @@ class SimulationVisualizer:
         return drone_positions
 
     def _draw_drones(self, ax, drone_positions):
-        """Draw drones on the given axis"""
+        """Draw drones on the given axis with embedded ID numbers"""
         for drone_id, position in drone_positions.items():
             color = self.colors[drone_id]
             
-            # Draw drone
+            # 减小无人机标记的大小
             ax.scatter(position[0], position[1], position[2], 
-                    color=color, s=100)
+                    color=color, s=150, alpha=0.7, edgecolors='black')
             
-            # Add label above the drone (no box)
-            ax.text(position[0], position[1], position[2] + 40, 
-                 f"{drone_id}", ha='center')
+            # 确保ID文本始终显示在标记前面
+            # 增加轮廓使文本更明显
+            text = ax.text(position[0], position[1], position[2], 
+                     f"{drone_id}", ha='center', va='center', 
+                     color='white', fontweight='bold', fontsize=10,
+                     path_effects=[path_effects.withStroke(linewidth=2, foreground='black')],
+                     zorder=100)  # 确保文本显示在最上层
 
     def _draw_data_links(self, ax, data_comms, drone_positions):
-        """Draw DATA packet links on the given axis"""
+        """Draw DATA packet links on the given axis with smaller packet ID boxes"""
         for src_id, dst_id, packet_id, _, _ in data_comms:
             if src_id in drone_positions and dst_id in drone_positions:
                 start_pos = drone_positions[src_id]
@@ -511,14 +516,18 @@ class SimulationVisualizer:
                 
                 ax.add_artist(arrow)
                 
-                # Add packet ID at midpoint
+                # Add more visible packet ID at midpoint
                 mid_x, mid_y, mid_z = [(start_pos[i] + end_pos[i]) / 2 for i in range(3)]
+                
+                # Draw a smaller, more compact background for the packet ID
                 ax.text(mid_x, mid_y, mid_z, str(packet_id), 
-                      ha='center', va='center', 
-                      bbox=dict(facecolor='white', alpha=0.7))
+                      ha='center', va='center', fontsize=7, fontweight='bold',
+                      bbox=dict(boxstyle="round,pad=0.2", facecolor='lightblue', 
+                                alpha=0.8, edgecolor=self.comm_colors["DATA"], linewidth=1.5),
+                      zorder=99)  # 确保文本显示在上层但在无人机ID下方
 
     def _draw_ack_links(self, ax, ack_comms, drone_positions):
-        """Draw ACK packet links on the given axis"""
+        """Draw ACK packet links on the given axis with smaller packet ID boxes"""
         for src_id, dst_id, packet_id, _, _ in ack_comms:
             if src_id in drone_positions and dst_id in drone_positions:
                 start_pos = drone_positions[src_id]
@@ -531,8 +540,12 @@ class SimulationVisualizer:
                        color=self.comm_colors["ACK"], 
                        linewidth=2)
                 
-                # Add packet ID at midpoint
+                # Add more visible packet ID at midpoint
                 mid_x, mid_y, mid_z = [(start_pos[i] + end_pos[i]) / 2 for i in range(3)]
+                
+                # Draw a smaller, more compact background for the ACK packet ID
                 ax.text(mid_x, mid_y, mid_z, str(packet_id), 
-                       ha='center', va='center', 
-                       bbox=dict(facecolor='white', alpha=0.7))
+                       ha='center', va='center', fontsize=7, fontweight='bold',
+                       bbox=dict(boxstyle="round,pad=0.2", facecolor='lightgreen', 
+                                alpha=0.8, edgecolor=self.comm_colors["ACK"], linewidth=1.5),
+                       zorder=99)  # 确保文本显示在上层但在无人机ID下方
