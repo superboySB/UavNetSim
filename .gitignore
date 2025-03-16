@@ -6,4 +6,5 @@ __pycache__
 *.pyz
 *.pywz
 *.log
+.vscode/
 vis_results/

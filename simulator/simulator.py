@@ -73,35 +73,3 @@ class Simulator:
         scatter_plot(self)
 
         self.metrics.print_metrics()
-
-    def add_communication_tracking(self, visualizer):
-        """Add tracking for communication events"""
-        self.visualizer = visualizer
-        
-        # Save the original unicast_put method
-        original_unicast_put = self.channel.unicast_put
-        
-        # Rewrite unicast_put method to track communications
-        def tracked_unicast_put(message, dst_drone_id):
-            # Call the original method
-            result = original_unicast_put(message, dst_drone_id)
-            
-            # Record communication event
-            packet, _, src_drone_id, _ = message
-            
-            # Add packet type differentiation
-            packet_id = packet.packet_id
-            packet_type = "DATA"
-            
-            # Identify different types of packets
-            if packet_id >= 20000:
-                packet_type = "ACK"
-            elif packet_id >= 10000:
-                packet_type = "HELLO"
-            
-            self.visualizer.track_communication(src_drone_id, dst_drone_id, packet_id, packet_type)
-            
-            return result
-        
-        # Replace the method
-        self.channel.unicast_put = tracked_unicast_put
