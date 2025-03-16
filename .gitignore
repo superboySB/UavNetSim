@@ -6,5 +6,5 @@ __pycache__
 *.pyz
 *.pywz
 *.log
+*.gif
 .vscode/
-vis_results/

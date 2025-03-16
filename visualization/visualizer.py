@@ -5,6 +5,8 @@ from PIL import Image
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
+from matplotlib.widgets import Slider, Button, TextBox
+import io
 
 # Add 3D arrow class definition that handles arrows in 3D view
 class Arrow3D(FancyArrowPatch):
@@ -31,21 +33,24 @@ class SimulationVisualizer:
     Visualize UAV network simulation process, including movement trajectories and communication status
     """
     
-    def __init__(self, simulator, output_dir="vis_results"):
+    def __init__(self, simulator, output_dir="vis_results", vis_frame_interval=50000):
         """
         Initialize visualizer
         
         Parameters:
             simulator: simulator instance
             output_dir: output directory
+            vis_frame_interval: interval for visualization frames (microseconds)
         """
         self.simulator = simulator
         self.output_dir = output_dir
         self.config = simulator.config if hasattr(simulator, 'config') else None
         
+        # Store vis_frame_interval in microseconds
+        self.vis_frame_interval = vis_frame_interval
+        
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
-        os.makedirs(os.path.join(output_dir, "frames"), exist_ok=True)
         
         # Initialize data storage structures
         self.drone_positions = {i: [] for i in range(self.simulator.n_drones)}
@@ -66,6 +71,11 @@ class SimulationVisualizer:
         
         # Setup communication tracking
         self._setup_communication_tracking()
+        
+        # Reference for interactive elements
+        self.interactive_fig = None
+        self.interactive_slider = None
+        self.frame_times = []
     
     def _setup_communication_tracking(self):
         """Setup tracking for communication events"""
@@ -82,13 +92,14 @@ class SimulationVisualizer:
             
             # Add packet type differentiation
             packet_id = packet.packet_id
-            packet_type = "DATA"
             
-            # Identify different types of packets
+            # Identify packet type based on ID range
             if packet_id >= 20000:
                 packet_type = "ACK"
             elif packet_id >= 10000:
                 packet_type = "HELLO"
+            else:
+                packet_type = "DATA"
             
             self.track_communication(src_drone_id, dst_drone_id, packet_id, packet_type)
             
@@ -116,243 +127,172 @@ class SimulationVisualizer:
         # Record complete communication event information
         self.comm_events.append((src_id, dst_id, packet_id, packet_type, current_time))
     
-    def _generate_frame(self, time_idx, time_points):
-        """Generate a single frame for the animation"""
-        current_time = time_points[time_idx]
+    def _draw_visualization_frame(self, fig, current_time):
+        """
+        Draw visualization elements on two side-by-side axes
         
-        # Create figure for this frame
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
+        Parameters:
+            fig: matplotlib figure to draw on
+            current_time: current simulation time (seconds)
+        """
+        fig.suptitle(f"UAV Network Simulation at t={int(current_time*1e6)}μs", fontsize=14)
         
-        # Set plot title with timestamp
-        ax.set_title(f"UAV Network Simulation at t={int(current_time*1e6)}μs")
+        # Create left and right subplots for DATA and ACK only
+        ax_data = fig.add_subplot(121, projection='3d')
+        ax_ack = fig.add_subplot(122, projection='3d')
         
-        # Set axis labels
-        ax.set_xlabel('X (m)')
-        ax.set_ylabel('Y (m)')
-        ax.set_zlabel('Z (m)')
+        # Set titles for subplots
+        ax_data.set_title("DATA Packets")
+        ax_ack.set_title("ACK Packets")
         
-        # Get current frame drone positions
-        drone_positions = {}
+        # Set axis labels and limits for both subplots
+        for ax in [ax_data, ax_ack]:
+            ax.set_xlabel('X (m)')
+            ax.set_ylabel('Y (m)')
+            ax.set_zlabel('Z (m)')
+            ax.set_xlim(0, 600)
+            ax.set_ylim(0, 600)
+            ax.set_zlim(0, 600)
+            ax.grid(True)
         
-        # Find closest recorded position for each drone at current time
-        for drone_id in range(len(self.drone_positions)):
-            positions = self.drone_positions[drone_id]
-            timestamps = self.timestamps
-            
-            if positions and timestamps:
-                # Find closest timestamp
-                closest_idx = min(range(len(timestamps)), 
-                                key=lambda i: abs(timestamps[i] - current_time))
-                
-                # Get position at closest timestamp
-                if 0 <= closest_idx < len(positions):
-                    drone_positions[drone_id] = positions[closest_idx]
+        # Get drone positions at current time
+        drone_positions = self._get_drone_positions(current_time)
         
-        # Draw drones
-        for drone_id, position in drone_positions.items():
-            ax.scatter(position[0], position[1], position[2], 
-                      color=self.colors[drone_id], s=100, marker='o')
-            
-            # Add drone ID labels
-            ax.text(position[0], position[1], position[2]+10, f"{drone_id}", 
-                   color='black', fontsize=10, 
-                   ha='center', va='center', bbox=dict(facecolor='white', alpha=0.7))
+        # Draw drones on both subplots
+        for ax in [ax_data, ax_ack]:
+            self._draw_drones(ax, drone_positions)
         
         # Draw communication links
-        recent_window = 0.05  # Show events from the last 50ms
+        display_window = self.vis_frame_interval / 1e6  # Convert to seconds
         recent_comms = [e for e in self.comm_events 
-                       if current_time - recent_window <= e[4] <= current_time]
+                      if current_time - display_window <= e[4] <= current_time]
         
-        # Add arrows for communications
-        for src_id, dst_id, packet_id, packet_type, event_time in recent_comms:
-            if src_id in drone_positions and dst_id in drone_positions:
-                src_pos = drone_positions[src_id]
-                dst_pos = drone_positions[dst_id]
-                
-                # Choose color based on packet type
-                arrow_color = self.comm_colors.get(packet_type, "gray")
-                
-                # Draw arrow for DATA packets
-                if packet_type == "DATA":
-                    arrow = Arrow3D([src_pos[0], dst_pos[0]], 
-                                  [src_pos[1], dst_pos[1]], 
-                                  [src_pos[2], dst_pos[2]],
-                                  mutation_scale=15, 
-                                  lw=2, arrowstyle="-|>", color=arrow_color)
-                    ax.add_artist(arrow)
-                    
-                    # Add packet ID label near the middle of the arrow
-                    mid_x = (src_pos[0] + dst_pos[0]) / 2
-                    mid_y = (src_pos[1] + dst_pos[1]) / 2
-                    mid_z = (src_pos[2] + dst_pos[2]) / 2
-                    ax.text(mid_x, mid_y, mid_z, f"pkt:{packet_id}", 
-                           color='blue', fontsize=8, 
-                           bbox=dict(facecolor='white', alpha=0.7))
-                
-                # Draw curved arrow for ACK packets
-                elif packet_type == "ACK":
-                    # Create curved path (simple arc in 3D)
-                    # Calculate midpoint with an offset
-                    mid_x = (src_pos[0] + dst_pos[0]) / 2
-                    mid_y = (src_pos[1] + dst_pos[1]) / 2
-                    mid_z = (src_pos[2] + dst_pos[2]) / 2 + 30  # Offset upward
-                    
-                    ax.plot([src_pos[0], mid_x, dst_pos[0]], 
-                           [src_pos[1], mid_y, dst_pos[1]], 
-                           [src_pos[2], mid_z, dst_pos[2]], 
-                           color=arrow_color, linestyle='-', marker='v', markevery=[1])
-                
-                # Draw star burst for HELLO packets (broadcast)
-                elif packet_type == "HELLO":
-                    ax.scatter(src_pos[0], src_pos[1], src_pos[2], 
-                              color=arrow_color, marker='*', s=200, alpha=0.7)
+        # Get only the latest communication events for each src-dst pair
+        latest_data_comms = self._get_latest_comms(recent_comms, "DATA")
+        latest_ack_comms = self._get_latest_comms(recent_comms, "ACK")
         
-        # Set axis range from map dimensions
-        map_length = 600  # Default map dimensions
-        map_width = 600
-        map_height = 600
+        # Draw DATA packet links on left subplot
+        self._draw_data_links(ax_data, latest_data_comms, drone_positions)
         
-        ax.set_xlim(0, map_length)
-        ax.set_ylim(0, map_width)
-        ax.set_zlim(0, map_height)
+        # Draw ACK packet links on right subplot
+        self._draw_ack_links(ax_ack, latest_ack_comms, drone_positions)
         
-        # Add grid
-        ax.grid(True)
+        # Add legends
+        data_legend = [Line2D([0], [0], color=self.comm_colors["DATA"], lw=2, label="DATA Packets")]
+        ax_data.legend(handles=data_legend, loc='upper right')
         
-        # Add legend
-        legend_elements = [
-            Line2D([0], [0], color='blue', lw=2, label='DATA Packets'),
-            Line2D([0], [0], color='green', marker='v', label='ACK Packets (curved)'),
-            Line2D([0], [0], color='orange', marker='*', label='HELLO Packets (broadcast)')
-        ]
-        ax.legend(handles=legend_elements, loc='upper right')
-        
-        # Save frame
-        frame_path = os.path.join(self.output_dir, 'frames', f'frame_{time_idx:04d}.png')
-        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
-        plt.close(fig)
-        
-        return frame_path
+        ack_legend = [Line2D([0], [0], color=self.comm_colors["ACK"], lw=2, label="ACK Packets")]
+        ax_ack.legend(handles=ack_legend, loc='upper right')
 
-    def save_frame_visualization(self, interval=0.02):
+    def _get_latest_comms(self, comms, packet_type):
         """
-        Save frame visualization (periodic snapshot)
+        Get only the latest communication for each src-dst pair
         
         Parameters:
-            interval: Frame interval (seconds)
+            comms: List of communication events
+            packet_type: Type of packet (DATA, ACK, HELLO)
+            
+        Returns:
+            List of latest communication events for each src-dst pair
         """
-        if not self.timestamps:
-            print("No timestamps available")
-            return []
+        # Filter by packet type
+        type_comms = [e for e in comms if e[3] == packet_type]
         
-        max_time = max(self.timestamps)
-        min_time = min(self.timestamps)
-        print(f"Time range: {min_time:.2f}s to {max_time:.2f}s")
+        # Dictionary to store latest comm for each src-dst pair
+        latest_comms_dict = {}
         
-        # Use evenly spaced time points to cover entire time range
-        time_points = np.arange(min_time, max_time + interval, interval)
-        
-        # Create frames directory (if not exist)
-        frames_dir = os.path.join(self.output_dir, 'frames')
-        os.makedirs(frames_dir, exist_ok=True)
-        
-        # Clear all old frames in frames directory
-        for old_frame in os.listdir(frames_dir):
-            if old_frame.endswith('.png'):
-                os.remove(os.path.join(frames_dir, old_frame))
-        
-        total_frames = len(time_points)
-        print(f"Starting frame generation: {total_frames} frames to create")
-        
-        # Create frames
-        frames = []
-        successful_frames = 0
-        
-        for time_idx, current_time in enumerate(time_points):
-            frame_path = self._generate_frame(time_idx, time_points)
-            frames.append(frame_path)
-            successful_frames += 1
+        # For each src-dst pair, keep only the comm with the latest timestamp
+        for comm in type_comms:
+            src_id, dst_id = comm[0], comm[1]
+            pair_key = (src_id, dst_id)
             
-            # Output progress every 10 frames
-            if (time_idx + 1) % 10 == 0 or time_idx == len(time_points) - 1:
-                print(f"Generated {successful_frames}/{total_frames} frames")
+            # If this is the first comm for this pair, or has a later timestamp
+            if pair_key not in latest_comms_dict or comm[4] > latest_comms_dict[pair_key][4]:
+                latest_comms_dict[pair_key] = comm
         
-        print(f"Successfully generated {successful_frames} frames out of {total_frames} time points")
-        return frames
-    
+        # Return the values (latest comms)
+        return list(latest_comms_dict.values())
+
     def create_animations(self):
-        """Create animation, create GIF animation from frame visualization snapshot"""
-        # Find all frame files
-        frames_dir = os.path.join(self.output_dir, 'frames')
-        if not os.path.exists(frames_dir):
-            print("No frames directory found. Run save_frame_visualization first.")
+        """Create GIF animation of the simulation"""
+        import io
+        
+        if not self.timestamps:
+            print("No timestamps available for animation")
             return
         
-        # Get all PNG frames, and sort by number
-        frame_files = [f for f in os.listdir(frames_dir) if f.endswith('.png') and f.startswith('frame_')]
-        print(f"Found {len(frame_files)} frame files in {frames_dir}")
-        
-        if not frame_files:
-            print("No frame files found")
-            return
-        
-        # Sort frames by number
-        frames = sorted([
-            os.path.join(frames_dir, f) for f in frame_files
-        ], key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
-        
-        if frames:
-            print(f"Creating animation from {len(frames)} frames...")
-            gif_path = os.path.join(self.output_dir, 'uav_simulation.gif')
+        try:
+            print("Creating animation GIF...")
+            animation_frames = []
             
-            # Use PIL to create GIF
-            # Read first frame to get size
-            first_img = Image.open(frames[0])
-            standard_size = first_img.size
+            # Calculate frames based on vis_frame_interval
+            min_time = min(self.timestamps)
+            max_time = max(self.timestamps)
+            frame_interval_sec = self.vis_frame_interval / 1e6  # Convert microseconds to seconds
             
-            # Load all frames
-            images = []
-            for i, frame_path in enumerate(frames):
-                img = Image.open(frame_path)
-                # Ensure all frames consistent size
-                if img.size != standard_size:
-                    img = img.resize(standard_size, Image.LANCZOS)
-                images.append(img)
+            # Create frame times at regular intervals based on vis_frame_interval
+            self.frame_times = []
+            current_time = min_time
+            while current_time <= max_time:
+                self.frame_times.append(current_time)
+                current_time += frame_interval_sec
+            
+            n_frames = len(self.frame_times)
+            print(f"Generating {n_frames} frames with interval of {frame_interval_sec} seconds")
+            
+            for i, time_point in enumerate(self.frame_times):
+                print(f"Generating frame {i+1}/{n_frames}", end="\r")
                 
-                # Output progress every 100 frames
-                if (i+1) % 100 == 0 or i == len(frames) - 1:
-                    print(f"Loaded {i+1}/{len(frames)} frames")
-            
-            if images:
-                # Adjust frame rate
-                fps = 10
-                    
-                print(f"Saving GIF with {len(images)} frames at {fps} fps...")
+                # Create a new figure for this frame
+                fig = plt.figure(figsize=(18, 6))
                 
-                # Save GIF
-                images[0].save(
-                    gif_path, 
-                    save_all=True, 
-                    append_images=images[1:], 
-                    duration=int(1000/fps), 
-                    loop=0
+                # Draw visualization elements
+                self._draw_visualization_frame(fig, time_point)
+                
+                # Save the figure to a BytesIO buffer
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png', dpi=100)
+                plt.close(fig)
+                
+                # Reset buffer position and open image
+                buf.seek(0)
+                img = Image.open(buf)
+                # Convert to RGB mode to ensure compatibility
+                img = img.convert('RGB')
+                # Create a copy of the image to ensure it's fully loaded
+                img_copy = img.copy()
+                animation_frames.append(img_copy)
+                buf.close()
+            
+            print("\nSaving animation...")
+            
+            # Save the animation
+            animation_file = os.path.join(self.output_dir, "uav_network_simulation.gif")
+            if animation_frames:
+                # Save with explicit parameters
+                animation_frames[0].save(
+                    animation_file,
+                    format='GIF',
+                    save_all=True,
+                    append_images=animation_frames[1:],
+                    duration=100,  # ms per frame
+                    loop=0,  # Loop indefinitely
+                    optimize=False
                 )
-                print(f"Created animation: {gif_path}")
+                print(f"Animation saved to {animation_file}")
             else:
-                print("No valid frames to create animation")
-        else:
-            print("No frames found for animation")
+                print("No frames were generated for the animation")
+                
+        except Exception as e:
+            print(f"Error creating animation: {e}")
+            print("Continuing with interactive visualization...")
     
-    def run_visualization(self, tracking_interval=0.01):
+    def run_visualization(self):
         """
         Run visualization process
-        
-        Parameters:
-            tracking_interval: Tracking position time interval (seconds)
         """
-        # Convert to microseconds
-        tracking_interval_us = tracking_interval * 1e6
+        # Use vis_frame_interval directly (it's already in microseconds)
+        tracking_interval_us = self.vis_frame_interval
         
         # Start tracking drone positions
         def track_positions():
@@ -369,10 +309,230 @@ class SimulationVisualizer:
         """
         print("Finalizing visualization...")
         
-        # Get frames (save frame graphics)
-        self.save_frame_visualization()
-        
         # Create animation
         self.create_animations()
         
+        # Create interactive visualization
+        self.create_interactive_visualization()
+        
         print("Visualization complete. Output saved to:", self.output_dir)
+
+    def create_interactive_visualization(self):
+        """Create an interactive visualization with a slider for time navigation"""
+        if not self.timestamps:
+            print("No timestamps available for interactive visualization")
+            return
+        
+        print("Creating interactive visualization...")
+        
+        # Make sure frame_times is populated
+        if not self.frame_times:
+            min_time = min(self.timestamps)
+            max_time = max(self.timestamps)
+            frame_interval_sec = self.vis_frame_interval / 1e6
+            
+            current_time = min_time
+            while current_time <= max_time:
+                self.frame_times.append(current_time)
+                current_time += frame_interval_sec
+        
+        # Convert frame times to microseconds for the slider
+        frame_times_us = [t * 1e6 for t in self.frame_times]
+        
+        # Create figure with fixed subplots - this is key to solving the error
+        fig = plt.figure(figsize=(15, 7))
+        plt.subplots_adjust(bottom=0.15)  # Make room for controls
+        
+        # Create the subplots once and keep them
+        gs = fig.add_gridspec(1, 2, hspace=0, wspace=0.2)
+        ax_data = fig.add_subplot(gs[0, 0], projection='3d')
+        ax_ack = fig.add_subplot(gs[0, 1], projection='3d')
+        
+        # Add slider axes
+        slider_ax = plt.axes([0.2, 0.05, 0.65, 0.03])
+        time_slider = Slider(
+            slider_ax, 'Time (μs)', 
+            min(frame_times_us), max(frame_times_us),
+            valinit=frame_times_us[0],
+            valstep=frame_times_us  # Discrete steps based on frame times
+        )
+        
+        # Add text box and button for direct time input
+        text_ax = plt.axes([0.2, 0.01, 0.2, 0.03])
+        time_text = TextBox(text_ax, 'Go to time (μs): ', initial='')
+        
+        button_ax = plt.axes([0.45, 0.01, 0.1, 0.03])
+        goto_button = Button(button_ax, 'Go')
+        
+        def update_plot(current_time):
+            # Clear existing content on axes
+            ax_data.clear()
+            ax_ack.clear()
+            
+            # Set titles
+            ax_data.set_title("DATA Packets")
+            ax_ack.set_title("ACK Packets")
+            
+            # Update main figure title
+            fig.suptitle(f"UAV Network Simulation at t={int(current_time*1e6)}μs", fontsize=14)
+            
+            # Set axis properties for both subplots
+            for ax in [ax_data, ax_ack]:
+                ax.set_xlabel('X (m)')
+                ax.set_ylabel('Y (m)')
+                ax.set_zlabel('Z (m)')
+                ax.set_xlim(0, 600)
+                ax.set_ylim(0, 600)
+                ax.set_zlim(0, 600)
+                ax.grid(True)
+            
+            # Get drone positions
+            drone_positions = self._get_drone_positions(current_time)
+            
+            # Draw drones on both subplots
+            self._draw_drones(ax_data, drone_positions)
+            self._draw_drones(ax_ack, drone_positions)
+            
+            # Get recent communications
+            display_window = self.vis_frame_interval / 1e6
+            recent_comms = [e for e in self.comm_events 
+                            if current_time - display_window <= e[4] <= current_time]
+            
+            # Filter by packet type and get latest only
+            latest_data_comms = self._get_latest_comms(recent_comms, "DATA")
+            latest_ack_comms = self._get_latest_comms(recent_comms, "ACK")
+            
+            # Draw communication links
+            self._draw_data_links(ax_data, latest_data_comms, drone_positions)
+            self._draw_ack_links(ax_ack, latest_ack_comms, drone_positions)
+            
+            # Add legends
+            data_legend = [Line2D([0], [0], color=self.comm_colors["DATA"], lw=2, label="DATA Packets")]
+            ax_data.legend(handles=data_legend, loc='upper right')
+            
+            ack_legend = [Line2D([0], [0], color=self.comm_colors["ACK"], lw=2, label="ACK Packets")]
+            ax_ack.legend(handles=ack_legend, loc='upper right')
+        
+        def update(val):
+            try:
+                # Get current time from slider
+                current_time_us = time_slider.val
+                current_time = current_time_us / 1e6  # Convert to seconds
+                
+                # Update plot with new time
+                update_plot(current_time)
+                
+                # Redraw
+                fig.canvas.draw_idle()
+            except Exception as e:
+                print(f"Error updating plot: {e}")
+        
+        def goto_time(event):
+            try:
+                # Get time from text box
+                time_us = float(time_text.text)
+                
+                # Find the closest frame time
+                closest_time_us = min(frame_times_us, key=lambda x: abs(x - time_us))
+                
+                # Update slider to trigger update
+                time_slider.set_val(closest_time_us)
+                
+                # Update textbox to show actual time used
+                time_text.set_val(str(int(closest_time_us)))
+            except ValueError:
+                print("Invalid time format. Please enter a number.")
+            except Exception as e:
+                print(f"Error going to time: {e}")
+        
+        # Connect the update function to the slider
+        time_slider.on_changed(update)
+        
+        # Connect the goto function to the button
+        goto_button.on_clicked(goto_time)
+        
+        # Initial plot
+        update_plot(self.frame_times[0])
+        
+        # Save reference to interactive elements
+        self.interactive_fig = fig
+        self.interactive_slider = time_slider
+        
+        # Show the interactive visualization
+        plt.show()
+        
+        print("Interactive visualization created. Close the plot window to continue.")
+
+    def _get_drone_positions(self, current_time):
+        """Get drone positions at a specific time"""
+        drone_positions = {}
+        for drone_id in range(len(self.drone_positions)):
+            positions = self.drone_positions[drone_id]
+            timestamps = self.timestamps
+            
+            if positions and timestamps:
+                # Find closest timestamp
+                closest_idx = min(range(len(timestamps)), 
+                               key=lambda i: abs(timestamps[i] - current_time))
+                
+                # Get position at closest timestamp
+                if 0 <= closest_idx < len(positions):
+                    drone_positions[drone_id] = positions[closest_idx]
+        return drone_positions
+
+    def _draw_drones(self, ax, drone_positions):
+        """Draw drones on the given axis"""
+        for drone_id, position in drone_positions.items():
+            color = self.colors[drone_id]
+            
+            # Draw drone
+            ax.scatter(position[0], position[1], position[2], 
+                    color=color, s=100)
+            
+            # Add label above the drone (no box)
+            ax.text(position[0], position[1], position[2] + 40, 
+                 f"{drone_id}", ha='center')
+
+    def _draw_data_links(self, ax, data_comms, drone_positions):
+        """Draw DATA packet links on the given axis"""
+        for src_id, dst_id, packet_id, _, _ in data_comms:
+            if src_id in drone_positions and dst_id in drone_positions:
+                start_pos = drone_positions[src_id]
+                end_pos = drone_positions[dst_id]
+                
+                # Draw an arrow for DATA packet
+                arrow = Arrow3D([start_pos[0], end_pos[0]], 
+                              [start_pos[1], end_pos[1]], 
+                              [start_pos[2], end_pos[2]],
+                              mutation_scale=15, 
+                              lw=2, 
+                              arrowstyle="-|>", 
+                              color=self.comm_colors["DATA"])
+                
+                ax.add_artist(arrow)
+                
+                # Add packet ID at midpoint
+                mid_x, mid_y, mid_z = [(start_pos[i] + end_pos[i]) / 2 for i in range(3)]
+                ax.text(mid_x, mid_y, mid_z, str(packet_id), 
+                      ha='center', va='center', 
+                      bbox=dict(facecolor='white', alpha=0.7))
+
+    def _draw_ack_links(self, ax, ack_comms, drone_positions):
+        """Draw ACK packet links on the given axis"""
+        for src_id, dst_id, packet_id, _, _ in ack_comms:
+            if src_id in drone_positions and dst_id in drone_positions:
+                start_pos = drone_positions[src_id]
+                end_pos = drone_positions[dst_id]
+                
+                # Draw a straight line for ACK packet
+                ax.plot([start_pos[0], end_pos[0]], 
+                       [start_pos[1], end_pos[1]], 
+                       [start_pos[2], end_pos[2]],
+                       color=self.comm_colors["ACK"], 
+                       linewidth=2)
+                
+                # Add packet ID at midpoint
+                mid_x, mid_y, mid_z = [(start_pos[i] + end_pos[i]) / 2 for i in range(3)]
+                ax.text(mid_x, mid_y, mid_z, str(packet_id), 
+                       ha='center', va='center', 
+                       bbox=dict(facecolor='white', alpha=0.7))
